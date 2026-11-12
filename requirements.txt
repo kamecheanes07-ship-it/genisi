@@ -1,0 +1,12 @@
+# Portable Genisi backend dependencies (any Python/Docker hosting provider).
+# Docker SDK belongs in worker/requirements.txt on the VPS, NOT here.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30,<1.0
+pydantic>=2.8,<3.0
+httpx>=0.27,<1.0
+huggingface_hub>=0.27,<2.0
+openai>=1.60,<3.0
+argon2-cffi>=23.1,<26.0
+email-validator>=2.2,<3.0
+itsdangerous>=2.2,<3.0
+cryptography>=42,<47

@@ -1,0 +1,456 @@
+{
+  "manifest_version": "1.1",
+  "source_architecture": {
+    "html_documents": 1,
+    "inline_stylesheets": 1,
+    "inline_script_blocks": 1,
+    "external_scripts": [
+      {
+        "name": "Tailwind CSS CDN",
+        "url": "https://cdn.tailwindcss.com",
+        "version": "un-pinned"
+      },
+      {
+        "name": "Lucide",
+        "url": "https://unpkg.com/lucide@latest",
+        "version": "latest"
+      },
+      {
+        "name": "canvas-confetti",
+        "url": "https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js",
+        "version": "1.6.0"
+      }
+    ],
+    "external_font": {
+      "family": "Plus Jakarta Sans",
+      "weights": [
+        400,
+        500,
+        600,
+        700,
+        800
+      ],
+      "url": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    },
+    "js_architecture": "global_functions_with_inline_event_handlers",
+    "observed_unique_ids": 124,
+    "observed_onclick_attributes": 233,
+    "observed_named_function_declarations": 92,
+    "css_custom_properties_found": 0,
+    "inline_script_syntax_check": "passed_with_node_22.16.0"
+  },
+  "visual_system": {
+    "viewport": {
+      "html_body_width": "100vw",
+      "html_body_height": "100vh",
+      "body_overflow": "hidden",
+      "desktop_area_height": "calc(100vh - 48px)",
+      "taskbar_height": "48px"
+    },
+    "typography": {
+      "font_stack": [
+        "Segoe UI Variable Display",
+        "Segoe UI",
+        "Plus Jakarta Sans",
+        "-apple-system",
+        "sans-serif"
+      ],
+      "scale_character": "compact_windows_ui_labels_and_controls"
+    },
+    "palette": {
+      "body_background": "#c2e0ff",
+      "accent_blue": "#0067c0",
+      "dark_mode_base_text": "#f1f5f9",
+      "dark_mode_primary_surface": "rgba(20, 26, 40, 0.86) to rgba(28, 36, 54, 0.90)",
+      "wallpaper_treatment": "landscape_photo_with_blue_hue_rotation_saturation_brightness_contrast_and_blue_white_gradient_overlay"
+    },
+    "materials": {
+      "mica_panel": {
+        "background": "linear-gradient(160deg, rgba(245,250,255,0.82) 0%, rgba(230,242,255,0.76) 100%)",
+        "backdrop_blur": "32px",
+        "saturation": "190%",
+        "border": "1px solid rgba(255,255,255,0.72)",
+        "shadow": "0 24px 60px rgba(0,35,90,0.18), 0 2px 12px rgba(0,0,0,0.05)"
+      },
+      "mica_window": {
+        "background": "linear-gradient(135deg, rgba(228,240,255,0.82) 0%, rgba(244,249,255,0.88) 100%)",
+        "backdrop_blur": "36px",
+        "saturation": "200%",
+        "border": "1px solid rgba(255,255,255,0.8)",
+        "shadow": "0 28px 70px rgba(8,38,88,0.24), 0 4px 16px rgba(0,0,0,0.06)"
+      },
+      "taskbar_glass": {
+        "background": "rgba(232,242,255,0.68)",
+        "backdrop_blur": "28px",
+        "saturation": "190%",
+        "border_top": "1px solid rgba(255,255,255,0.68)"
+      },
+      "pill_glass": {
+        "background": "rgba(255,255,255,0.76)",
+        "border": "1px solid rgba(255,255,255,0.88)",
+        "shadow": "0 2px 10px rgba(0,35,90,0.06)"
+      },
+      "dark_mode": "same material grammar with translucent navy surfaces and adapted text/borders",
+      "accessibility_mode": "body contrast 1.12 and 2px blue app-window borders"
+    },
+    "motion": {
+      "window_transition": "transform 0.22s cubic-bezier(0.16,1,0.3,1), opacity 0.18s ease, width/height/top/left 0.22s ease",
+      "hidden_window": "opacity 0; scale 0.94; translateY(18px); pointer-events none",
+      "wallpaper_transition": "filter/background-image 0.5s ease; transform 0.6s cubic-bezier(0.22,1,0.36,1)",
+      "lockscreen_unlock": "translateY(-100%) and opacity fade over 450ms callback window"
+    }
+  },
+  "desktop_layers": [
+    {
+      "id": "brightnessOverlay",
+      "purpose": "brightness dimming overlay",
+      "z_index": 9990
+    },
+    {
+      "id": "wallpaper",
+      "purpose": "full-screen background image",
+      "z_index": 0
+    },
+    {
+      "id": "lockScreen",
+      "purpose": "lock screen and clock/date",
+      "z_index": 2000
+    },
+    {
+      "id": "desktopArea",
+      "purpose": "desktop and application windows",
+      "height": "calc(100vh - 48px)"
+    },
+    {
+      "id": "contextMenu",
+      "purpose": "desktop right-click action menu",
+      "z_index": 950
+    },
+    {
+      "id": "startMenu",
+      "purpose": "centered launcher above taskbar",
+      "width": "392px",
+      "height": "475px",
+      "bottom": "58px",
+      "z_index": 900
+    },
+    {
+      "id": "quickSettings",
+      "purpose": "quick toggles and brightness/volume controls",
+      "width": "322px",
+      "bottom": "58px",
+      "right": "12px",
+      "z_index": 900
+    },
+    {
+      "id": "photoModal",
+      "purpose": "full-screen image preview",
+      "z_index": 1500
+    },
+    {
+      "id": "osToast",
+      "purpose": "transient desktop notifications",
+      "z_index": 1800
+    },
+    {
+      "id": "taskbar",
+      "purpose": "weather, pinned apps, running indicators, system clock",
+      "height": "48px",
+      "position": "fixed bottom"
+    }
+  ],
+  "windows": [
+    {
+      "id": "win-files",
+      "app": "File Explorer",
+      "width": "870px",
+      "height": "545px",
+      "top": "6%",
+      "left": "17%",
+      "material": "mica-window"
+    },
+    {
+      "id": "win-settings",
+      "app": "Settings",
+      "width": "870px",
+      "height": "545px",
+      "top": "7%",
+      "left": "18%",
+      "material": "mica-window"
+    },
+    {
+      "id": "win-office",
+      "app": "Office suite",
+      "width": "900px",
+      "height": "560px",
+      "top": "5%",
+      "left": "15%",
+      "material": "mica-window",
+      "views": [
+        "word",
+        "excel",
+        "ppt",
+        "outlook"
+      ]
+    },
+    {
+      "id": "win-games",
+      "app": "Windows 7 Games Hub",
+      "width": "800px",
+      "height": "530px",
+      "top": "7%",
+      "left": "20%",
+      "material": "mica-window",
+      "views": [
+        "minesweeper",
+        "purble",
+        "pairs"
+      ]
+    },
+    {
+      "id": "win-paint",
+      "app": "Paint Studio",
+      "width": "700px",
+      "height": "480px",
+      "top": "9%",
+      "left": "22%",
+      "material": "mica-window"
+    },
+    {
+      "id": "win-calc",
+      "app": "Calculator",
+      "width": "280px",
+      "height": "390px",
+      "top": "14%",
+      "left": "38%",
+      "material": "mica-window"
+    },
+    {
+      "id": "win-copilot",
+      "app": "Windows Copilot concept",
+      "width": "380px",
+      "height": "490px",
+      "top": "9%",
+      "right": "4%",
+      "material": "mica-window"
+    },
+    {
+      "id": "win-terminal",
+      "app": "PowerShell concept terminal",
+      "width": "600px",
+      "height": "370px",
+      "top": "15%",
+      "left": "25%",
+      "material": "dark translucent terminal panel"
+    },
+    {
+      "id": "win-edge",
+      "app": "Edge concept browser",
+      "width": "820px",
+      "height": "510px",
+      "top": "8%",
+      "left": "19%",
+      "material": "mica-window"
+    },
+    {
+      "id": "win-store",
+      "app": "Microsoft Store concept",
+      "width": "760px",
+      "height": "480px",
+      "top": "10%",
+      "left": "21%",
+      "material": "mica-window"
+    },
+    {
+      "id": "win-mediaplayer",
+      "app": "Media Player",
+      "width": "460px",
+      "height": "330px",
+      "top": "16%",
+      "left": "31%",
+      "material": "mica-window"
+    }
+  ],
+  "functional_inventory": {
+    "file_explorer": {
+      "navigation": [
+        "home",
+        "desktop",
+        "documents",
+        "downloads",
+        "gallery",
+        "music",
+        "videos",
+        "system",
+        "onedrive",
+        "favorites",
+        "recent"
+      ],
+      "capabilities": [
+        "tabs",
+        "breadcrumb",
+        "search",
+        "new folder",
+        "new text document",
+        "new Word document",
+        "new Excel sheet",
+        "cut",
+        "copy",
+        "paste",
+        "rename",
+        "delete",
+        "properties",
+        "grid density",
+        "sorting",
+        "gallery timeline",
+        "image preview"
+      ],
+      "data_model": "in-memory JavaScript virtual file system named vfs"
+    },
+    "settings_sections": [
+      "home",
+      "system",
+      "bluetooth",
+      "network",
+      "personalisation",
+      "apps",
+      "account",
+      "time",
+      "games",
+      "accessibility",
+      "privacy",
+      "update"
+    ],
+    "office": {
+      "word": [
+        "contenteditable editor",
+        "bold",
+        "italic",
+        "underline",
+        "alignment",
+        "unordered list",
+        "text color",
+        "save to Documents simulation"
+      ],
+      "excel": [
+        "editable grid",
+        "active cell",
+        "formula bar",
+        "SUM/AutoSum"
+      ],
+      "powerpoint": [
+        "slide thumbnails",
+        "editable title/subtitle",
+        "add slide",
+        "cycle theme",
+        "fullscreen presentation"
+      ],
+      "outlook": [
+        "mail list",
+        "message reader",
+        "compose simulation"
+      ]
+    },
+    "games": [
+      "Minesweeper",
+      "Purble Place / Comfy Cakes",
+      "Purble Pairs"
+    ],
+    "paint": [
+      "canvas drawing",
+      "color picker",
+      "brush size",
+      "clear canvas",
+      "save image to gallery"
+    ],
+    "calculator": [
+      "numeric/operator keypad",
+      "expression display",
+      "evaluate"
+    ],
+    "copilot": [
+      "chat UI",
+      "quick action chips",
+      "keyword-based app/action routing"
+    ],
+    "terminal": [
+      "simulated command prompt",
+      "games",
+      "apps/office",
+      "matrix",
+      "clear"
+    ],
+    "edge": [
+      "URL input",
+      "Go action",
+      "iframe"
+    ],
+    "store": [
+      "featured bundle",
+      "app cards and launch buttons"
+    ],
+    "media_player": [
+      "track display",
+      "previous/play/next",
+      "Web Audio synth"
+    ],
+    "window_manager": [
+      "open",
+      "focus/z-index",
+      "close",
+      "minimize",
+      "maximize/restore",
+      "drag",
+      "taskbar indicators",
+      "two-window snap layout"
+    ]
+  },
+  "functional_limitations": [
+    "The File Explorer uses in-memory VFS state, not the host filesystem.",
+    "The PowerShell panel is a simulated command interface, not a real shell.",
+    "Copilot uses a small keyword-based action router, not general AI or OS automation.",
+    "Outlook compose is a UI simulation and does not transmit email.",
+    "Windows settings, Store, and Office actions are concept UI unless code proves a backend integration.",
+    "Edge is an iframe-based concept browser, not a complete browser engine implementation.",
+    "Media Player uses Web Audio synthesis rather than proving external music streaming."
+  ],
+  "change_policy": {
+    "design_source": "embedded_system_prompt",
+    "default_output": "create or update the requested project artifact without requiring an external master file",
+    "patch_style": "minimal, additive, and scoped",
+    "must_preserve": [
+      "existing app windows",
+      "IDs and relevant function contracts",
+      "Mica design language",
+      "window geometry",
+      "taskbar and overlays",
+      "working interactions"
+    ],
+    "never": [
+      "generic redesign",
+      "remove existing windows to simplify",
+      "invent APIs",
+      "claim simulations are real OS integrations",
+      "claim an external reference file was loaded"
+    ]
+  },
+  "validation": [
+    "follow the embedded Windows 12 System Prompt as the design specification; no external reference file is required",
+    "check JavaScript syntax",
+    "check duplicate IDs and unresolved element references",
+    "trace changed handlers and function callers",
+    "test changed interactions and window manager behavior",
+    "inspect light and dark mode plus accessibility mode",
+    "compare screenshots at identical viewport when visual fidelity is claimed",
+    "provide complete output file when requested",
+    "state exact tests performed and unverified areas"
+  ],
+  "prompt_integration": {
+    "runtime_source": "app/windows12_prompt.py",
+    "runtime_loaded_automatically": true,
+    "external_html_required": false,
+    "dataset_read_required": false,
+    "user_attachment_required": false,
+    "note": "This is an optional design manifest for documentation. The application activates Windows 12 from its embedded System Prompt and does not load this JSON at runtime."
+  }
+}
