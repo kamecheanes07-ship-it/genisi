@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
 import os
+import re
 import time
 from pathlib import Path
 from typing import Any, Literal
+from urllib.parse import urljoin
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -17,6 +20,12 @@ from pydantic import BaseModel, Field
 from .agent import Agent
 from .windows12_prompt import WINDOWS12_SYSTEM_PROMPT, WINDOWS12_PROMPT_VERSION, windows12_prompt_metadata
 from .genisi_auth import (
+    MEDIA_TTL_DAYS,
+    _origin_guard,
+    _rate_limit,
+    _sha,
+    _client_ip,
+    cleanup_all_expired_media,
     get_genisi_user_record,
     initialize_genisi_auth,
     require_genisi_csrf,
@@ -27,6 +36,11 @@ from .worker_client import worker as WORKER
 APP_NAME = "AnesNT Genisi"
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production").lower()
+STEPAUDIO_MUSIC_SPACE_URL = os.getenv("STEPAUDIO_MUSIC_SPACE_URL", "https://stepfun-ai-stepaudio-3-music.hf.space").rstrip("/")
+VOXCPM_SPACE_URL = os.getenv("VOXCPM_SPACE_URL", "https://openbmb-voxcpm-demo.hf.space").rstrip("/")
+_music_schema_cache: dict[str, Any] = {"ts": 0.0, "submit_props": None}
+_voxcpm_meta_cache: dict[str, Any] = {"ts": 0.0, "prefix": None}
+_cleanup_task: asyncio.Task[Any] | None = None
 AGENT = Agent()
 app = FastAPI(title=APP_NAME, version="0.4.4-windows12-embedded-system-prompt", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -77,8 +91,21 @@ def get_windows12_system_context() -> dict[str, Any]:
     }
 
 
+async def _periodic_media_cleanup_loop() -> None:
+    await asyncio.sleep(15)
+    while True:
+        try:
+            result = await asyncio.to_thread(cleanup_all_expired_media)
+            if result.get("assets_deleted"):
+                print(f"[Genisi] Purged {result['assets_deleted']} expired (>= {MEDIA_TTL_DAYS}d) media asset(s).")
+        except Exception as exc:
+            print(f"[Genisi] Media cleanup sweep skipped: {type(exc).__name__}")
+        await asyncio.sleep(6 * 3600)
+
+
 @app.on_event("startup")
-def startup() -> None:
+async def startup() -> None:
+    global _cleanup_task
     # Prevent same-UID child project processes from inspecting this API process's /proc environ.
     try:
         import ctypes
@@ -86,9 +113,13 @@ def startup() -> None:
     except Exception:
         pass
 
-    if ENVIRONMENT == "production" and (len(SESSION_SECRET) < 32 or SESSION_SECRET == "INSECURE-LOCAL-ONLY-CHANGE-ME"):
+    env_mode = os.getenv("ENVIRONMENT", ENVIRONMENT).lower()
+    sess_secret = os.getenv("SESSION_SECRET", SESSION_SECRET)
+    if env_mode == "production" and (len(sess_secret) < 32 or sess_secret == "INSECURE-LOCAL-ONLY-CHANGE-ME"):
         raise RuntimeError("Set SESSION_SECRET to a stable random value of at least 32 characters in your hosting provider environment/secrets.")
-    initialize_genisi_auth()
+    await asyncio.to_thread(initialize_genisi_auth)
+    if _cleanup_task is None or _cleanup_task.done():
+        _cleanup_task = asyncio.create_task(_periodic_media_cleanup_loop())
     # The Windows 12 design prompt is part of the application code. No Dataset,
     # HTML file, or user attachment is read to activate this design mode.
     prompt_info = windows12_prompt_metadata()
@@ -97,6 +128,13 @@ def startup() -> None:
         f"version={WINDOWS12_PROMPT_VERSION} chars={prompt_info['chars']} "
         f"sha256={prompt_info['sha256']}"
     )
+
+
+@app.on_event("shutdown")
+async def shutdown() -> None:
+    global _cleanup_task
+    if _cleanup_task and not _cleanup_task.done():
+        _cleanup_task.cancel()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -115,6 +153,9 @@ def health() -> dict[str, Any]:
         "sandbox_note": "Local workspace runner; not a per-user Docker container.",
         "hosting_mode": "self-hosted-backend",
         "huggingface_dataset": os.getenv("GENISI_DATASET_ID", "AnesKAM/Genisi-users"),
+        "media_ttl_days": MEDIA_TTL_DAYS,
+        "voxcpm_space": VOXCPM_SPACE_URL,
+        "stepaudio_music_space": STEPAUDIO_MUSIC_SPACE_URL,
         "windows12_prompt": windows12_prompt_metadata(),
     }
 
@@ -361,6 +402,191 @@ async def preview(project_id: str, path: str, request: Request) -> Response:
         )
     except (httpx.HTTPError, RuntimeError, ValueError) as exc:
         raise HTTPException(502, f"تعذر الوصول إلى معاينة Next.js: {str(exc)[:300]}") from exc
+
+
+def _normalize_space_media_urls(obj: Any, base_url: str) -> Any:
+    if isinstance(obj, dict):
+        out: dict[str, Any] = {}
+        for k, v in obj.items():
+            if isinstance(v, str) and v.startswith("/") and (
+                "url" in k.lower() or "audio" in k.lower() or v.endswith((".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"))
+            ):
+                out[k] = urljoin(base_url + "/", v.lstrip("/"))
+            else:
+                out[k] = _normalize_space_media_urls(v, base_url)
+        return out
+    if isinstance(obj, list):
+        return [_normalize_space_media_urls(x, base_url) for x in obj]
+    return obj
+
+
+async def _get_stepaudio_submit_props(client: httpx.AsyncClient) -> set[str] | None:
+    now = time.time()
+    if _music_schema_cache["submit_props"] is not None and now - float(_music_schema_cache["ts"]) < 3600:
+        return _music_schema_cache["submit_props"]
+    try:
+        r = await client.get(f"{STEPAUDIO_MUSIC_SPACE_URL}/openapi.json", timeout=8.0)
+        if r.status_code == 200:
+            spec = r.json()
+            post_op = (((spec.get("paths") or {}).get("/v1/audio/music/submit") or {}).get("post") or {})
+            schema = ((((post_op.get("requestBody") or {}).get("content") or {}).get("application/json") or {}).get("schema") or {})
+            ref = schema.get("$ref", "")
+            if ref.startswith("#/components/schemas/"):
+                sname = ref.split("/")[-1]
+                schema = ((spec.get("components") or {}).get("schemas") or {}).get(sname) or {}
+            props = schema.get("properties")
+            if isinstance(props, dict) and props:
+                prop_set = set(props.keys())
+                _music_schema_cache["submit_props"] = prop_set
+                _music_schema_cache["ts"] = now
+                return prop_set
+    except Exception:
+        pass
+    return None
+
+
+@app.post("/api/music/submit")
+async def music_submit(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Proxy music generation submissions to stepfun-ai/StepAudio-3-Music."""
+    _origin_guard(request)
+    _rate_limit("music-submit:" + _sha(_client_ip(request)), 20, 300)
+    task = str(payload.get("task") or "text_to_music").strip()
+    if task not in {"text_to_music", "vocal_to_music", "music_cover"}:
+        task = "text_to_music"
+    caption = str(payload.get("caption") or payload.get("prompt") or "").strip()[:2000]
+    if not caption:
+        raise HTTPException(422, "يرجى إدخال وصف الموسيقى (caption)")
+    body: dict[str, Any] = {"task": task, "caption": caption}
+    for opt_key in ("lyrics", "instrumental", "duration", "vocal_language", "audio_base64", "src_audio_base64", "reference_audio", "audio_url", "audio", "seed"):
+        if opt_key in payload and payload[opt_key] is not None and payload[opt_key] != "":
+            body[opt_key] = payload[opt_key]
+
+    try:
+        async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
+            allowed_props = await _get_stepaudio_submit_props(client)
+            send_body = {k: v for k, v in body.items() if (allowed_props is None or k in allowed_props)} if allowed_props else dict(body)
+            if "task" not in send_body and (allowed_props is None or "task" in allowed_props):
+                send_body["task"] = task
+            if "caption" not in send_body and (allowed_props is None or "caption" in allowed_props):
+                send_body["caption"] = caption
+
+            upstream = await client.post(f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/submit", json=send_body)
+            if upstream.status_code == 422 and len(send_body) > 2:
+                minimal: dict[str, Any] = {"task": task, "caption": caption}
+                if body.get("lyrics"):
+                    minimal["lyrics"] = body["lyrics"]
+                upstream = await client.post(f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/submit", json=minimal)
+            data = upstream.json() if upstream.content else {}
+            if upstream.status_code >= 400:
+                detail = data.get("detail") or data.get("error") or data.get("message") or f"StepAudio HTTP {upstream.status_code}"
+                raise HTTPException(upstream.status_code if upstream.status_code < 500 else 502, str(detail)[:320])
+            return _normalize_space_media_urls(data, STEPAUDIO_MUSIC_SPACE_URL)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر الاتصال بنموذج الموسيقى StepAudio-3-Music: {str(exc)[:240]}") from exc
+
+
+@app.post("/api/music/query")
+async def music_query(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Poll music generation status from stepfun-ai/StepAudio-3-Music."""
+    _origin_guard(request)
+    _rate_limit("music-query:" + _sha(_client_ip(request)), 180, 300)
+    task_id = str(payload.get("task_id") or payload.get("id") or "").strip()[:160]
+    if not task_id:
+        raise HTTPException(422, "معرّف المهمة task_id مطلوب")
+    try:
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            upstream = await client.post(f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/query", json={"task_id": task_id})
+            data = upstream.json() if upstream.content else {}
+            if upstream.status_code >= 400:
+                detail = data.get("detail") or data.get("error") or data.get("message") or f"StepAudio HTTP {upstream.status_code}"
+                raise HTTPException(upstream.status_code if upstream.status_code < 500 else 502, str(detail)[:320])
+            return _normalize_space_media_urls(data, STEPAUDIO_MUSIC_SPACE_URL)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر الاستعلام عن حالة الموسيقى: {str(exc)[:240]}") from exc
+
+
+@app.post("/api/voice/tts")
+async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
+    """Server-side proxy for openbmb/VoxCPM-Demo Gradio speech generation."""
+    _origin_guard(request)
+    _rate_limit("voice-tts:" + _sha(_client_ip(request)), 45, 300)
+    text = str(payload.get("text") or "").strip()[:1200]
+    if not text:
+        raise HTTPException(422, "النص الصوتي فارغ")
+    control = str(payload.get("control_instruction") or "").strip()[:400]
+    try:
+        cfg_value = max(1.0, min(3.0, float(payload.get("cfg_value", 2.0))))
+    except (TypeError, ValueError):
+        cfg_value = 2.0
+    raw_norm = payload.get("do_normalize") if "do_normalize" in payload else payload.get("normalize", False)
+    do_normalize = bool(raw_norm)
+    if re.search(r"[\u0600-\u06FF\u0400-\u04FF\u3040-\u30FF\uAC00-\uD7AF]", text):
+        do_normalize = False
+
+    try:
+        async with httpx.AsyncClient(timeout=90.0, follow_redirects=True) as client:
+            prefix = _voxcpm_meta_cache.get("prefix")
+            if prefix is None or time.time() - float(_voxcpm_meta_cache.get("ts") or 0) > 3600:
+                prefix = "/gradio_api"
+                for cand in ("/gradio_api", ""):
+                    r_info = await client.get(f"{VOXCPM_SPACE_URL}{cand}/info", timeout=12.0)
+                    if r_info.status_code == 200:
+                        prefix = cand
+                        _voxcpm_meta_cache["prefix"] = prefix
+                        _voxcpm_meta_cache["ts"] = time.time()
+                        break
+
+            gradio_data = [text, control, None, False, "", cfg_value, do_normalize, False]
+            r_call = await client.post(
+                f"{VOXCPM_SPACE_URL}{prefix}/call/generate",
+                json={"data": gradio_data},
+                timeout=25.0,
+            )
+            call_json = r_call.json() if r_call.content else {}
+            event_id = call_json.get("event_id")
+            if r_call.status_code >= 400 or not event_id:
+                raise HTTPException(502, f"فشل إرسال طلب الصوت إلى VoxCPM ({r_call.status_code})")
+
+            audio_url = ""
+            cur_event = ""
+            async with client.stream("GET", f"{VOXCPM_SPACE_URL}{prefix}/call/generate/{event_id}", timeout=90.0) as sse:
+                async for line in sse.aiter_lines():
+                    if line.startswith("event:"):
+                        cur_event = line[6:].strip()
+                    elif line.startswith("data:"):
+                        raw_data = line[5:].strip()
+                        if cur_event == "error":
+                            raise HTTPException(502, f"خطأ من VoxCPM: {raw_data[:240]}")
+                        if cur_event == "complete":
+                            arr = json.loads(raw_data)
+                            first = arr[0] if isinstance(arr, list) and arr else arr
+                            if isinstance(first, dict):
+                                u = str(first.get("url") or "")
+                                p = str(first.get("path") or "")
+                                if u:
+                                    audio_url = u if u.startswith("http") else urljoin(VOXCPM_SPACE_URL + "/", u.lstrip("/"))
+                                elif p:
+                                    audio_url = f"{VOXCPM_SPACE_URL}{prefix}/file={p}"
+                            elif isinstance(first, str):
+                                audio_url = first if first.startswith("http") else f"{VOXCPM_SPACE_URL}{prefix}/file={first}"
+                            break
+            if not audio_url:
+                raise HTTPException(502, "لم يُرجع نموذج VoxCPM ملفاً صوتياً")
+            r_audio = await client.get(audio_url, timeout=45.0)
+            if r_audio.status_code >= 400 or not r_audio.content:
+                raise HTTPException(502, "تعذر تنزيل المقطع الصوتي من VoxCPM")
+            media_type = (r_audio.headers.get("content-type") or "audio/wav").split(";")[0].strip()
+            if not media_type.startswith("audio/"):
+                media_type = "audio/wav"
+            return Response(content=r_audio.content, media_type=media_type, headers={"Cache-Control": "no-store"})
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر توليد الصوت عبر VoxCPM: {str(exc)[:240]}") from exc
 
 
 # The secure router owns registration, login, logout, preferences, history and account health.
