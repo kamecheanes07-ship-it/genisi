@@ -82,7 +82,7 @@ class Windows12EmbeddedPromptTests(unittest.TestCase):
         self.assertEqual(meta["chars"], len(WINDOWS12_SYSTEM_PROMPT))
 
     def test_api_exposes_embedded_prompt_routes(self) -> None:
-        paths = {route.path for route in app.routes}
+        paths = {route.path for route in app.routes if hasattr(route, "path")}
         self.assertIn("/api/windows12/prompt", paths)
         self.assertIn("/api/windows12/prompt/status", paths)
         self.assertIn("/api/reference/windows12/prompt", paths)  # compatibility alias

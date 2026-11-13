@@ -413,6 +413,45 @@ html[dir="rtl"]:not(.side-collapsed) #rail{transform:translateX(14px)}
     var(--card);
   position:relative; animation:fadeUp .4s ease;
 }
+/* مربع إنشاء الصور الحرفي (371×364 بحواف دائرية وتدرج فضي-أبيض ناعم مطابق للصورة المرجعية) */
+@keyframes imgSquareSheen{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+.waitcard.img-square{
+  width:min(100%, 371px);
+  aspect-ratio:371 / 364;
+  border-radius:28px;
+  border:none;
+  box-shadow:none;
+  background:linear-gradient(128deg, #f2f0f0 0%, #f6f5f5 34%, #fefefe 54%, #f7f6f6 76%, #f3f1f1 100%);
+  background-size:215% 215%;
+  animation:fadeUp .32s ease, imgSquareSheen 2.8s ease-in-out infinite;
+}
+.waitcard.img-square .wc-stage{
+  width:100%; height:100%; aspect-ratio:auto;
+}
+.waitcard.img-square.has-img{
+  width:fit-content;
+  max-width:min(100%, 460px);
+  aspect-ratio:auto;
+  background:transparent;
+  border:1px solid var(--card-border);
+  animation:none;
+}
+.waitcard.img-square.has-img .wc-result img{
+  border-radius:27px;
+  max-height:520px;
+}
+.waitcard.img-square.is-err{
+  width:100%;
+  max-width:460px;
+  aspect-ratio:auto;
+  background:var(--card);
+  border:1px solid var(--card-border);
+  animation:none;
+}
 .wc-stage{position:relative; aspect-ratio:16/9.4; display:grid; place-items:center; overflow:hidden}
 .wc-stage.tall{aspect-ratio:16/11}
 .wc-sheen{position:absolute; inset:0; pointer-events:none}
@@ -435,9 +474,325 @@ html[dir="rtl"]:not(.side-collapsed) #rail{transform:translateX(14px)}
 .wc-result{position:relative; animation:fadeIn .5s ease}
 .wc-result img{width:100%; max-height:560px; object-fit:contain; display:block; background:var(--bg); cursor:zoom-in}
 .wc-result video{width:100%; max-height:560px; display:block; background:#000; outline:none}
-.wc-result .aud{display:flex;align-items:center;gap:14px;padding:22px 20px}
-.wc-result .aud audio{flex:1; height:40px}
-.wc-result .aud .disc{width:46px;height:46px;border-radius:50%;background:linear-gradient(135deg,#08a7ff,#9b72cb);display:grid;place-items:center;color:#fff;flex:none}
+.wc-result .aud{display:flex;align-items:center;gap:14px;padding:18px 20px;flex-wrap:wrap}
+.wc-result .aud audio{flex:1; min-width:210px; height:40px}
+.wc-result .aud .disc{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,#08a7ff,#9b72cb);display:grid;place-items:center;color:#fff;flex:none;box-shadow:0 8px 20px rgba(8,167,255,.22)}
+.wc-result .aud-meta{display:flex;flex-direction:column;gap:2px;min-width:120px;max-width:100%;flex:1 1 160px}
+.wc-result .aud-meta b{font-size:13.6px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wc-result .aud-meta small{font-size:11.8px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.att-link{display:inline-flex;align-items:center;gap:7px;color:inherit;text-decoration:none;max-width:240px}
+.att-link .fname{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att-expired{opacity:.62;font-size:11.5px;color:var(--text3)}
+
+/* ═══════════ وضع التحدث المباشر (Voice Call — VoxCPM) ═══════════ */
+#viewVoice{
+  height:100%;
+  overflow:hidden;
+}
+#viewVoice.on{
+  display:flex;
+  flex-direction:column;
+}
+.voice-shell{
+  flex:1;
+  min-height:0;
+  width:100%;
+  max-width:860px;
+  margin:0 auto;
+  padding:clamp(12px,2.4vh,24px) clamp(14px,3vw,28px) clamp(16px,2.8vh,26px);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:space-between;
+  gap:14px;
+}
+.voice-top{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.voice-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 13px;
+  border-radius:999px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  font-size:12.4px;
+  color:var(--text2);
+}
+.voice-badge .vdot{
+  width:8px; height:8px; border-radius:50%;
+  background:#22c55e;
+  box-shadow:0 0 0 3px rgba(34,197,94,.18);
+}
+.voice-top-actions{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+}
+.voice-chip-btn{
+  height:36px;
+  padding:0 13px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  background:var(--surface);
+  color:var(--text2);
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  font-size:12.4px;
+  transition:all .18s ease;
+}
+.voice-chip-btn:hover{background:var(--surface2);color:var(--text)}
+.voice-chip-btn.on{border-color:rgba(8,167,255,.45);color:var(--blue-h);background:var(--blue-soft)}
+.voice-chip-btn.end{border-color:rgba(239,68,68,.35);color:#ef4444;background:rgba(239,68,68,.08)}
+.voice-chip-btn.end:hover{background:rgba(239,68,68,.16)}
+.voice-center{
+  flex:1;
+  min-height:0;
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+}
+/* المربع المخصص لوضع التحدث فقط (بنفس تناسب 371×364 وحواف دائرية ناعمة متناغمة مع واجهة Genisi) */
+.voice-stage-box{
+  position:relative;
+  width:min(74vw, 340px);
+  max-height:min(44vh, 334px);
+  aspect-ratio:371 / 364;
+  border-radius:28px;
+  background:linear-gradient(128deg, #f2f0f0 0%, #f6f5f5 34%, #fefefe 54%, #f7f6f6 76%, #f3f1f1 100%);
+  background-size:210% 210%;
+  box-shadow:0 18px 48px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.85);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:18px;
+  cursor:pointer;
+  user-select:none;
+  overflow:hidden;
+  transition:transform .25s ease, box-shadow .25s ease;
+}
+[data-theme="dark"] .voice-stage-box{
+  background:
+    radial-gradient(95% 95% at 76% 20%, rgba(255,255,255,.09), transparent 58%),
+    linear-gradient(132deg, rgba(31,35,44,.96) 0%, rgba(39,45,58,.96) 44%, rgba(50,58,74,.94) 56%, rgba(28,32,41,.98) 100%);
+  border:1px solid rgba(255,255,255,.09);
+  box-shadow:0 22px 56px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.voice-stage-box:hover{transform:translateY(-2px)}
+.voice-stage-box[data-vstate="listening"]{
+  box-shadow:0 20px 54px rgba(8,167,255,.24), 0 0 0 2px rgba(8,167,255,.38);
+}
+.voice-stage-box[data-vstate="speaking"]{
+  animation:imgSquareSheen 3.2s ease-in-out infinite;
+  box-shadow:0 22px 58px rgba(155,114,203,.26), 0 0 0 2px rgba(155,114,203,.38);
+}
+.voice-orb-wrap{
+  position:relative;
+  width:116px;
+  height:116px;
+  display:grid;
+  place-items:center;
+}
+.voice-orb-halo{
+  position:absolute;
+  inset:-10px;
+  border-radius:50%;
+  background:radial-gradient(circle, rgba(8,167,255,.28), rgba(155,114,203,.16) 55%, transparent 72%);
+  transform:scale(var(--v-level, 1));
+  transition:transform .08s linear;
+}
+.voice-orb-core{
+  position:relative;
+  width:84px;
+  height:84px;
+  border-radius:50%;
+  background:linear-gradient(135deg, #08a7ff 0%, #6b7cff 52%, #9b72cb 100%);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  color:#fff;
+  box-shadow:0 10px 28px rgba(8,167,255,.32);
+  transform:scale(calc(0.96 + (var(--v-level, 1) - 1) * 0.45));
+  transition:transform .08s linear;
+}
+.voice-bars{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  height:32px;
+}
+.voice-bars i{
+  display:block;
+  width:4.5px;
+  height:10px;
+  border-radius:99px;
+  background:#fff;
+  transition:height .09s ease;
+}
+.voice-stage-box[data-vstate="thinking"] .voice-orb-core,
+.voice-stage-box[data-vstate="synthesizing"] .voice-orb-core{
+  animation:corePulse 1.35s ease-in-out infinite;
+}
+.voice-stage-status{
+  font-size:13px;
+  font-weight:500;
+  color:#3c424d;
+  padding:4px 14px;
+  border-radius:999px;
+  background:rgba(0,0,0,.045);
+  max-width:88%;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+[data-theme="dark"] .voice-stage-status{
+  color:var(--text2);
+  background:rgba(255,255,255,.06);
+}
+.voice-captions{
+  width:min(100%, 660px);
+  min-height:54px;
+  max-height:112px;
+  overflow-y:auto;
+  text-align:center;
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  padding:2px 10px;
+}
+.voice-cap-user{
+  font-size:13px;
+  color:var(--text3);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.voice-cap-ai{
+  font-size:15px;
+  line-height:1.6;
+  color:var(--text);
+  font-weight:450;
+}
+/* شريط الإدخال الخاص بوضع التحدث فقط — مطابق لطول وعرض الشريط الأفقي النحيف (660×64px) ومتناغم مع واجهة Genisi */
+.voice-bottom{
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:8px;
+}
+.voice-pill-bar{
+  width:min(100%, 660px);
+  height:64px;
+  min-height:64px;
+  max-height:64px;
+  border-radius:999px;
+  background:var(--surface);
+  border:1px solid var(--border2);
+  box-shadow:0 8px 28px rgba(0,0,0,.14);
+  padding:0 12px 0 14px;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+[data-theme="light"] .voice-pill-bar{
+  background:#ffffff;
+  border-color:rgba(23,31,52,.11);
+  box-shadow:0 8px 26px rgba(18,32,62,.08);
+}
+.voice-pill-bar:focus-within{
+  border-color:rgba(8,167,255,.48);
+  box-shadow:0 10px 32px rgba(8,167,255,.14);
+}
+.voice-pill-bar .vp-btn{
+  width:40px;
+  height:40px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  color:var(--text2);
+  background:transparent;
+  flex:none;
+  transition:background .16s ease, color .16s ease, transform .16s ease;
+}
+.voice-pill-bar .vp-btn:hover{
+  background:var(--surface2);
+  color:var(--text);
+}
+.voice-pill-bar .vp-btn.rec{
+  background:rgba(239,68,68,.15);
+  color:#ef4444;
+  box-shadow:0 0 0 3px rgba(239,68,68,.16);
+}
+.voice-pill-bar .vp-btn.send{
+  background:var(--blue-h);
+  color:#fff;
+}
+.voice-pill-bar .vp-btn.send:hover{
+  filter:brightness(1.07);
+}
+.voice-pill-bar .vp-btn.stop{
+  background:rgba(239,68,68,.16);
+  color:#ef4444;
+}
+.voice-pill-input{
+  flex:1;
+  min-width:0;
+  height:100%;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:var(--text);
+  font:inherit;
+  font-size:15px;
+  padding:0 6px;
+}
+.voice-pill-input::placeholder{
+  color:var(--text3);
+}
+.voice-pill-model{
+  height:36px;
+  padding:0 11px;
+  border-radius:999px;
+  background:transparent;
+  color:var(--text2);
+  font-size:13.2px;
+  font-weight:500;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  flex:none;
+  white-space:nowrap;
+  transition:background .16s ease, color .16s ease;
+}
+.voice-pill-model b{font-weight:600;color:var(--text)}
+.voice-pill-model span{color:var(--text3);font-weight:400}
+.voice-pill-model:hover{background:var(--surface2);color:var(--text)}
+.cbtn.live-call-btn{
+  color:var(--text2);
+}
+.cbtn.live-call-btn:hover{
+  color:var(--blue-h);
+  background:var(--blue-soft);
+}
+@media (max-width: 640px){
+  .voice-pill-bar{height:58px;min-height:58px;max-height:58px;padding:0 9px}
+  .voice-pill-model span{display:none}
+  .voice-stage-box{width:min(76vw, 296px)}
+}
 .wc-actions{position:absolute;top:10px;inset-inline-end:10px;display:flex;gap:7px;opacity:0;transition:opacity .2s}
 .wc-result:hover .wc-actions{opacity:1}
 .miniBtn{width:36px;height:36px;border-radius:11px;background:rgba(12,14,16,.72);backdrop-filter:blur(8px);color:#e8eaed;display:grid;place-items:center;border:1px solid rgba(255,255,255,.13);transition:all .18s}
@@ -937,6 +1292,48 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
   </div>
 </main>
 
+<!-- ═══════════ VOICE CALL / SPEAKING MODE (VoxCPM) ═══════════ -->
+<main class="view" id="viewVoice" aria-label="وضع التحدث المباشر">
+  <div class="voice-shell">
+    <div class="voice-top">
+      <div class="voice-badge">
+        <span class="vdot"></span>
+        <span id="voiceAutoMeta">وضع التحدث · صوت ولغة تلقائيان</span>
+        <span class="wc-timer" id="voiceTimer">00:00</span>
+      </div>
+      <div class="voice-top-actions">
+        <button type="button" class="voice-chip-btn on" id="voiceHandsFreeBtn"></button>
+        <button type="button" class="voice-chip-btn end" id="voiceCloseBtn"></button>
+      </div>
+    </div>
+    <div class="voice-center">
+      <div class="voice-stage-box" id="voiceStageBox" role="button" tabindex="0" data-vstate="idle" aria-label="التحدث مع Genisi">
+        <div class="voice-orb-wrap">
+          <div class="voice-orb-halo"></div>
+          <div class="voice-orb-core">
+            <span class="voice-bars" id="voiceBars"><i></i><i></i><i></i><i></i><i></i></span>
+          </div>
+        </div>
+        <div class="voice-stage-status" id="voiceStateLabel">جاهز للتحدث</div>
+      </div>
+      <div class="voice-captions" aria-live="polite">
+        <div class="voice-cap-user" id="voiceCapUser"></div>
+        <div class="voice-cap-ai" id="voiceCapAi"></div>
+      </div>
+    </div>
+    <div class="voice-bottom">
+      <div class="attachRow" id="voiceAttachRow" style="display:none;max-width:660px;width:100%"></div>
+      <div class="voice-pill-bar" id="voicePillBar">
+        <button type="button" class="vp-btn" id="voicePlusBtn" aria-label="إرفاق"></button>
+        <input type="text" class="voice-pill-input" id="voiceInput" dir="auto" autocomplete="off">
+        <button type="button" class="voice-pill-model" id="voiceModelBtn"></button>
+        <button type="button" class="vp-btn" id="voiceMicBtn" aria-label="مايكروفون"></button>
+        <button type="button" class="vp-btn send" id="voiceSendBtn" aria-label="إرسال" style="display:none"></button>
+      </div>
+    </div>
+  </div>
+</main>
+
 <!-- ═══════════ GALLERY PANEL ═══════════ -->
 <div id="scrim"></div>
 <nav id="drawer" aria-label="المعرض" aria-hidden="true" inert>
@@ -1089,8 +1486,9 @@ const I18N = {
 ar:{dir:'rtl', newChat:'محادثة جديدة', search:'بحث', gallery:'المعرض', history:'السجل', theme:'المظهر',
   askPh:'اسأل Genisi', chatPh:'اكتب رسالتك…', tools:'أدوات',
   chipDay:'حسّن يومي', chipLearn:'علّمني', chipSearch:'ابحث في الويب',
-  chipImage:'أنشئ صورة', chipVideo:'أنشئ فيديو', pImage:'ولّد لي صورة: ', pVideo:'ولّد لي فيديو: ',
-  tSearch:'بحث في الويب', tLatex:'معادلات رياضية (LaTeX)', tChart:'مخطط توضيحي', tDoc:'مستند Word', tImage:'توليد صورة', tVideo:'توليد فيديو',
+  chipImage:'أنشئ صورة', chipVideo:'أنشئ فيديو', chipMusic:'أنشئ موسيقى', pImage:'ولّد لي صورة: ', pVideo:'ولّد لي فيديو: ', pMusic:'ألّف لي مقطوعة موسيقية احترافية عن: ',
+  tSearch:'بحث في الويب', tLatex:'معادلات رياضية (LaTeX)', tChart:'مخطط توضيحي', tDoc:'مستند Word', tImage:'توليد صورة', tVideo:'توليد فيديو', tMusic:'توليد موسيقى (StepAudio-3)', tVoiceCall:'وضع التحدث المباشر (مكالمة صوتية)',
+  voiceReady:'جاهز للتحدث — اضغط للحديث أو اكتب بالأسفل', voiceListening:'يستمع إليك الآن…', voiceThinking:'يفكّر في الرد…', voiceSynth:'يولّد الصوت عبر VoxCPM…', voiceSpeaking:'يتحدث الآن…', voiceAuto:'وضع التحدث · صوت ولغة تلقائيان', voiceEnd:'إنهاء التحدث', voiceHandsFree:'استماع تلقائي', mediaExpired:'حُذفت الوسائط تلقائياً بعد 15 يوماً من عدم الاستخدام', doneMusic:'تم تأليف الموسيقى',
   tFile:'إنشاء ملف Word / Excel / PowerPoint', pFile:'أنشئ لي ملف PowerPoint عن: ',
   deepOn:'التفكير في كل الرسائل', deepOff:'التفكير التلقائي فقط', deepOnMsg:'سيفكّر قبل كل إجابة', deepOffMsg:'التفكير تلقائي: في البرمجة والرياضيات والعلوم والمواضيع الحساسة',
   agentOn:'تفعيل وضع الوكيل', agentOff:'إطفاء وضع الوكيل', agentOnMsg:'وضع الوكيل مفعّل', agentOffMsg:'وضع الوكيل مطفي',
@@ -1134,8 +1532,9 @@ ar:{dir:'rtl', newChat:'محادثة جديدة', search:'بحث', gallery:'ال
 fr:{dir:'ltr', newChat:'Nouvelle conversation', search:'Rechercher', gallery:'Galerie', history:'Historique', theme:'Thème',
   askPh:'Demandez à Genisi', chatPh:'Écrivez votre message…', tools:'Outils',
   chipDay:'Booster ma journée', chipLearn:'M’apprendre', chipSearch:'Chercher sur le web',
-  chipImage:'Créer une image', chipVideo:'Créer une vidéo', pImage:'Génère une image : ', pVideo:'Génère une vidéo : ',
-  tSearch:'Recherche web', tLatex:'Équations (LaTeX)', tChart:'Diagramme', tDoc:'Document Word', tImage:'Générer une image', tVideo:'Générer une vidéo',
+  chipImage:'Créer une image', chipVideo:'Créer une vidéo', chipMusic:'Créer de la musique', pImage:'Génère une image : ', pVideo:'Génère une vidéo : ', pMusic:'Compose une musique professionnelle sur : ',
+  tSearch:'Recherche web', tLatex:'Équations (LaTeX)', tChart:'Diagramme', tDoc:'Document Word', tImage:'Générer une image', tVideo:'Générer une vidéo', tMusic:'Générer de la musique (StepAudio-3)', tVoiceCall:'Mode conversation vocale en direct',
+  voiceReady:'Prêt à parler — touchez le micro ou écrivez', voiceListening:'À l’écoute…', voiceThinking:'Réflexion…', voiceSynth:'Synthèse vocale VoxCPM…', voiceSpeaking:'En train de parler…', voiceAuto:'Mode vocal · langue et voix automatiques', voiceEnd:'Quitter le mode vocal', voiceHandsFree:'Écoute auto', mediaExpired:'Média supprimé après 15 jours d’inactivité', doneMusic:'Musique composée',
   tFile:'Créer un fichier Word / Excel / PowerPoint', pFile:'Crée un fichier PowerPoint sur : ',
   deepOn:'Réfléchir à chaque message', deepOff:'Réflexion automatique seulement', deepOnMsg:'Réflexion avant chaque réponse', deepOffMsg:'Réflexion automatique : code, maths, sciences et sujets sensibles',
   agentOn:'Activer le mode agent', agentOff:'Désactiver le mode agent', agentOnMsg:'Mode agent activé', agentOffMsg:'Mode agent désactivé',
@@ -1179,8 +1578,9 @@ fr:{dir:'ltr', newChat:'Nouvelle conversation', search:'Rechercher', gallery:'Ga
 en:{dir:'ltr', newChat:'New chat', search:'Search', gallery:'Gallery', history:'History', theme:'Theme',
   askPh:'Ask Genisi', chatPh:'Type your message…', tools:'Tools',
   chipDay:'Boost my day', chipLearn:'Teach me', chipSearch:'Search the web',
-  chipImage:'Create an image', chipVideo:'Create a video', pImage:'Generate an image: ', pVideo:'Generate a video: ',
-  tSearch:'Web search', tLatex:'Math equations (LaTeX)', tChart:'Diagram', tDoc:'Word document', tImage:'Generate image', tVideo:'Generate video',
+  chipImage:'Create an image', chipVideo:'Create a video', chipMusic:'Create music', pImage:'Generate an image: ', pVideo:'Generate a video: ', pMusic:'Compose a studio music track about: ',
+  tSearch:'Web search', tLatex:'Math equations (LaTeX)', tChart:'Diagram', tDoc:'Word document', tImage:'Generate image', tVideo:'Generate video', tMusic:'Generate music (StepAudio-3)', tVoiceCall:'Live Voice Call Mode',
+  voiceReady:'Ready to talk — tap mic or type below', voiceListening:'Listening…', voiceThinking:'Thinking…', voiceSynth:'Synthesizing voice via VoxCPM…', voiceSpeaking:'Speaking…', voiceAuto:'Voice Mode · Auto language & voice', voiceEnd:'End voice call', voiceHandsFree:'Auto-listen', mediaExpired:'Media automatically deleted after 15 days of inactivity', doneMusic:'Music ready',
   tFile:'Create Word / Excel / PowerPoint', pFile:'Create a PowerPoint file about: ',
   deepOn:'Think on every message', deepOff:'Automatic thinking only', deepOnMsg:'Thinking before every answer', deepOffMsg:'Automatic thinking: code, math, science and high-stakes topics',
   agentOn:'Turn agent mode on', agentOff:'Turn agent mode off', agentOnMsg:'Agent mode on', agentOffMsg:'Agent mode off',
@@ -1518,6 +1918,7 @@ function renderHomeHero(){
 const SUGS = [
   {ic:I.image, c:'#34a853', k:'chipImage', p:'pImage'},
   {ic:I.video, c:'#ea4335', k:'chipVideo', p:'pVideo'},
+  {ic:I.music, c:'#9b72cb', k:'chipMusic', p:'pMusic'},
   {ic:I.globe, c:'#9aa0a6', k:'chipSearch',p:'pSearch'}
 ];
 function renderSuggestions(){
@@ -1535,6 +1936,8 @@ function renderSuggestions(){
 }
 
 /* ═══════════════════════════ views / composer placement ═══════════════════════════ */
+let openVoiceCallHook = null;
+let refreshVoiceBarHook = null;
 function buildComposer(){
   const c = document.createElement('div');
   c.className = 'composer'; c.id = 'composer';
@@ -1546,6 +1949,7 @@ function buildComposer(){
       '<button id="toolsBtn" class="cbtn"></button>' +
       '<div class="crowFill"></div>' +
       '<button id="modelBtn"></button>' +
+      '<button class="cbtn live-call-btn" id="liveCallBtn" type="button" title="وضع التحدث المباشر">' + I.live + '</button>' +
       '<button class="cbtn" id="micBtn">' + I.mic + '</button>' +
       '<button id="sendBtn" title="send">' + I.up + '</button>' +
     '</div>';
@@ -1553,6 +1957,7 @@ function buildComposer(){
 }
 const composerEl = buildComposer();
 $('#homeSlot').appendChild(composerEl);
+$('#liveCallBtn').onclick = () => { if (openVoiceCallHook) openVoiceCallHook(); };
 function placeComposer(chat){
   (chat ? $('#chatSlot') : $('#homeSlot')).appendChild(composerEl);
   updatePh();
@@ -1564,41 +1969,61 @@ function refreshSend(){
   const b = $('#sendBtn');
   if (S.streaming){ b.className = 'stop'; b.classList.add('stop'); b.innerHTML = I.stop; b.title = T().stopGen; }
   else { b.className = input.value.trim() || S.attachments.length ? 'ready' : ''; b.innerHTML = I.up; b.title = T().send; }
+  if (refreshVoiceBarHook) refreshVoiceBarHook();
 }
 
 /* ═══════════════════════════ attachments ═══════════════════════════ */
+let syncMediaBlobHook = null;
+let syncMediaUrlHook = null;
+let touchMediaDbHook = null;
+let deleteMediaDbHook = null;
+let fetchMediaDbHook = null;
 $('#fileIn').addEventListener('change', e => { addFiles(e.target.files); e.target.value = ''; });
-/* v58.63: المرفق يُحفظ كـ File مع رابط blob فوري بدل FileReader غير المتزامن:
-   لا سباق مع زر الإرسال، حدّ الستة ملفات يُحترم فعلاً، ولا نسخة base64 مكرّرة في الذاكرة.
-   + لصق الصور من الحافظة وسحب الملفات وإفلاتها. */
+/* v58.63+: المرفقات (ملفات / صور / فيديوهات / صوت) تُحفظ محلياً وفي قاعدة البيانات مع حذف تلقائي بعد 15 يوم خمول */
+function inferAttKind(mime){
+  const m = String(mime || '').toLowerCase();
+  if (m.startsWith('image/')) return 'image';
+  if (m.startsWith('video/')) return 'video';
+  if (m.startsWith('audio/')) return 'audio';
+  return 'file';
+}
 function addFiles(list){
   const t = T();
   let added = 0;
   for (const f of Array.from(list || [])){
     if (S.attachments.length >= 6){ toast(t.attachMax, true); break; }
-    if (f.size > 9 * 1024 * 1024){ toast(t.fileBig + (f.name ? ' — ' + f.name : ''), true); continue; }
+    if (f.size > 24 * 1024 * 1024){ toast(t.fileBig + (f.name ? ' — ' + f.name : ''), true); continue; }
     if (!f.size) continue;
-    S.attachments.push({name: f.name || 'file', mime: f.type || 'application/octet-stream', url: URL.createObjectURL(f), file: f});
+    const aid = 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+    const mime = f.type || 'application/octet-stream';
+    const kind = inferAttKind(mime);
+    const name = f.name || 'file';
+    const objUrl = URL.createObjectURL(f);
+    mediaPut({id: aid, kind: kind, mime: mime, name: name, size: f.size, blob: f});
+    MEDIA.urls.set(aid, objUrl);
+    if (syncMediaBlobHook) syncMediaBlobHook(aid, f, {kind: kind, mime: mime, name: name});
+    S.attachments.push({id: aid, kind: kind, name: name, mime: mime, size: f.size, url: objUrl, dbUrl: '/api/media/' + aid, file: f});
     added++;
   }
   if (added) renderAttach();
   return added;
 }
 function renderAttach(){
-  const row = $('#attachRow');
-  if (!S.attachments.length){ row.style.display = 'none'; row.innerHTML = ''; refreshSend(); return; }
-  row.style.display = 'flex'; row.innerHTML = '';
-  S.attachments.forEach((a, i) => {
-    const d = document.createElement('div'); d.className = 'attach';
-    d.title = a.name || '';
-    d.innerHTML = (a.mime && a.mime.startsWith('image') ? '<img src="' + a.url + '" alt="">' : '<span class="fname">' + esc(a.name) + '</span>')
-      + '<button class="rm" type="button">' + I.x + '</button>';
-    d.querySelector('.rm').onclick = () => {
-      const x = S.attachments.splice(i, 1)[0];
-      if (x && /^blob:/.test(x.url || '')) { try { URL.revokeObjectURL(x.url); } catch (e) {} }
-      renderAttach();
-    };
-    row.appendChild(d);
+  ['#attachRow', '#voiceAttachRow'].forEach(sel => {
+    const row = $(sel); if (!row) return;
+    if (!S.attachments.length){ row.style.display = 'none'; row.innerHTML = ''; return; }
+    row.style.display = 'flex'; row.innerHTML = '';
+    S.attachments.forEach((a, i) => {
+      const d = document.createElement('div'); d.className = 'attach';
+      d.title = a.name || '';
+      d.innerHTML = (a.mime && a.mime.startsWith('image') ? '<img src="' + a.url + '" alt="">' : '<span class="fname">' + esc(a.name) + '</span>')
+        + '<button class="rm" type="button">' + I.x + '</button>';
+      d.querySelector('.rm').onclick = () => {
+        S.attachments.splice(i, 1);
+        renderAttach();
+      };
+      row.appendChild(d);
+    });
   });
   refreshSend();
 }
@@ -1923,11 +2348,28 @@ function mediaPut(rec){
   return rec.id;
 }
 function mediaGet(id){ return id ? mediaTx('readonly', st => st.get(id)) : Promise.resolve(null); }
+function mediaGetOrFetch(id){
+  if (!id) return Promise.resolve(null);
+  return mediaGet(id).then(rec => {
+    if (rec && rec.blob){
+      if (touchMediaDbHook) touchMediaDbHook(id);
+      return rec;
+    }
+    if (!fetchMediaDbHook) return null;
+    return fetchMediaDbHook(id).then(fetched => {
+      if (!fetched || !fetched.blob) return rec || null;
+      const merged = Object.assign({}, rec || {}, fetched);
+      mediaPut(merged);
+      return merged;
+    }).catch(() => rec || null);
+  });
+}
 function mediaDel(ids){
   ids = (ids || []).filter(Boolean);
   if (!ids.length) return;
   ids.forEach(id => { const u = MEDIA.urls.get(id); if (u){ try { URL.revokeObjectURL(u); } catch (e) {} MEDIA.urls.delete(id); } });
   mediaTx('readwrite', st => { ids.forEach(id => st.delete(id)); });
+  if (deleteMediaDbHook) deleteMediaDbHook(ids);
 }
 function mediaClear(){
   MEDIA.urls.forEach(u => { try { URL.revokeObjectURL(u); } catch (e) {} });
@@ -1935,8 +2377,12 @@ function mediaClear(){
   return mediaTx('readwrite', st => st.clear());
 }
 function mediaUrl(id){
-  if (MEDIA.urls.has(id)) return Promise.resolve(MEDIA.urls.get(id));
-  return mediaGet(id).then(rec => {
+  if (!id) return Promise.resolve('');
+  if (MEDIA.urls.has(id)){
+    if (touchMediaDbHook) touchMediaDbHook(id);
+    return Promise.resolve(MEDIA.urls.get(id));
+  }
+  return mediaGetOrFetch(id).then(rec => {
     if (!rec || !rec.blob) return '';
     if (!MEDIA.urls.has(id)) MEDIA.urls.set(id, URL.createObjectURL(rec.blob));
     return MEDIA.urls.get(id);
@@ -1944,7 +2390,10 @@ function mediaUrl(id){
 }
 function mediaIdsOf(msgs){
   const out = [];
-  (msgs || []).forEach(m => ((m && m.media) || []).forEach(x => { if (x && x.id) out.push(x.id); }));
+  (msgs || []).forEach(m => {
+    ((m && m.media) || []).forEach(x => { if (x && x.id) out.push(x.id); });
+    ((m && m.atts) || []).forEach(a => { if (a && a.id) out.push(a.id); });
+  });
   return out;
 }
 /* تنظيف عند الإقلاع: سجلات لا تشير إليها أي محادثة محفوظة (لكل الحسابات المحلية) وعمرها أكثر من يوم */
@@ -1972,41 +2421,61 @@ function mediaGC(){
     } catch (e) {}
   });
 }
-/* يسجّل وسائط بطاقة ضمن الدور الجاري ليُعاد بناؤها عند فتح المحادثة لاحقاً */
+/* يسجّل وسائط بطاقة ضمن الدور الجاري ويحفظها محلياً + في قاعدة البيانات (مع حذف بعد 15 يوم خمول) */
 function rememberMedia(kind, url, blob, meta, recExtra){
   if (!live) return null;
-  let entry = null;
-  if (blob || /^(blob:|data:)/i.test(url || '')){
-    const id = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-    const put = b => mediaPut(Object.assign({id: id, kind: kind, mime: b.type || '', blob: b}, meta || {}, recExtra || {}));
-    if (blob) put(blob); else fetch(url).then(r => r.blob()).then(put).catch(() => {});
+  const id = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 9);
+  const metaObj = Object.assign({}, meta || {});
+  const putAndSync = b => {
+    if (!b) return;
+    mediaPut(Object.assign({id: id, kind: kind, mime: b.type || '', blob: b}, metaObj, recExtra || {}));
+    if (syncMediaBlobHook) syncMediaBlobHook(id, b, Object.assign({kind: kind, mime: b.type || ''}, metaObj));
+  };
+  if (blob){
+    putAndSync(blob);
     if (/^blob:/i.test(url || '')) MEDIA.urls.set(id, url);
-    entry = Object.assign({id: id, kind: kind}, meta || {});
-  } else if (/^https?:\/\//i.test(url || '')) entry = Object.assign({kind: kind, url: url}, meta || {});
-  if (entry) live.media.push(entry);
+  } else if (/^(blob:|data:)/i.test(url || '')){
+    if (/^blob:/i.test(url || '')) MEDIA.urls.set(id, url);
+    fetch(url).then(r => r.blob()).then(putAndSync).catch(() => {});
+  } else if (/^https?:\/\//i.test(url || '')){
+    fetch(url).then(r => { if (!r.ok) throw new Error('http'); return r.blob(); }).then(putAndSync).catch(() => {
+      if (syncMediaUrlHook) syncMediaUrlHook(id, url, Object.assign({kind: kind}, metaObj));
+    });
+  } else {
+    return null;
+  }
+  const entry = Object.assign({id: id, kind: kind, url: /^https?:\/\//i.test(url || '') ? url : ('/api/media/' + id)}, metaObj);
+  live.media.push(entry);
   return entry;
 }
-function mediaGoneRow(card, icon){
+function mediaGoneRow(card, icon, customMsg){
   card.className = 'waitcard';
   card.style.maxWidth = '';
   card.innerHTML = '<div><div class="wc-result"><div class="filerow"><div class="fico" style="background:var(--surface2);color:var(--text3)">' + (icon || I.image) +
-    '</div><div class="fmeta"><b style="color:var(--text2);direction:inherit">' + esc(T().mediaGone) + '</b></div></div></div></div>';
+    '</div><div class="fmeta"><b style="color:var(--text2);direction:inherit">' + esc(customMsg || T().mediaGone) + '</b></div></div></div></div>';
 }
-/* بطاقة ثابتة لوسيط محفوظ (صورة / فيديو / ملف) — بنفس بنية بطاقة البث */
+/* بطاقة ثابتة لوسيط محفوظ (صورة / فيديو / صوت وموسيقى / ملف) — بنفس بنية بطاقة البث */
 function mediaCard(x){
   if (!x || !x.kind) return null;
   const t = T(), card = document.createElement('div');
   card.className = 'waitcard'; card.style.animation = 'none';
+  if (x.expired){
+    const ic = x.kind === 'video' ? I.video : (x.kind === 'audio' || x.kind === 'music') ? I.music : x.kind === 'file' ? I.file : I.image;
+    mediaGoneRow(card, ic, t.mediaExpired || t.mediaGone);
+    return card;
+  }
   const dl = '<div class="wc-actions"><button class="miniBtn" type="button" title="' + esc(t.download) + '">' + I.download + '</button></div>';
   if (x.kind === 'image'){
-    card.classList.add('has-img');
+    card.classList.add('img-square', 'has-img');
     card.innerHTML = '<div><div class="wc-result">' + dl + '<img alt="" loading="lazy"></div></div>';
     const img = card.querySelector('img');
+    const fallbackUrl = (x.url && !/^\/api\/media\//.test(x.url)) ? x.url : '';
     const ready = u => {
-      if (!u){ mediaGoneRow(card, I.image); return; }
+      const src = u || fallbackUrl;
+      if (!src){ mediaGoneRow(card, I.image); return; }
       img.onerror = () => mediaGoneRow(card, I.image);
-      img.src = u; img.onclick = () => openLightbox(u);
-      card.querySelector('.miniBtn').onclick = () => downloadAsset(u, 'genisi-image');
+      img.src = src; img.onclick = () => openLightbox(src);
+      card.querySelector('.miniBtn').onclick = () => downloadAsset(src, 'genisi-image');
     };
     if (x.id) mediaUrl(x.id).then(ready); else ready(x.url || '');
   } else if (x.kind === 'video'){
@@ -2014,16 +2483,46 @@ function mediaCard(x){
     if (x.ratio === '9:16' || x.ratio === '3:4') card.style.maxWidth = '320px';
     card.innerHTML = '<div><div class="wc-result">' + dl + '<video controls playsinline preload="metadata"></video></div></div>';
     const v = card.querySelector('video');
-    v.onerror = () => mediaGoneRow(card, I.video);
-    v.src = x.url || '';
-    card.querySelector('.miniBtn').onclick = () => downloadAsset(x.url, 'genisi-video');
-    if (!x.url) mediaGoneRow(card, I.video);
+    const fallbackUrl = (x.url && !/^\/api\/media\//.test(x.url)) ? x.url : '';
+    const ready = u => {
+      const src = u || fallbackUrl;
+      if (!src){ mediaGoneRow(card, I.video); return; }
+      v.onerror = () => {
+        if (src !== fallbackUrl && fallbackUrl){ v.src = fallbackUrl; return; }
+        mediaGoneRow(card, I.video);
+      };
+      v.src = src;
+      card.querySelector('.miniBtn').onclick = () => downloadAsset(src, 'genisi-video');
+    };
+    if (x.id) mediaUrl(x.id).then(ready); else ready(x.url || '');
+  } else if (x.kind === 'audio' || x.kind === 'music'){
+    const title = x.title || x.name || (S.lang === 'ar' ? 'مقطع صوتي' : 'Audio track');
+    const sub = x.caption || x.note || '';
+    card.innerHTML = '<div><div class="wc-result"><div class="aud">' +
+      '<div class="disc">' + I.music.replace('class="ic sm"', 'width="22" height="22"') + '</div>' +
+      '<div class="aud-meta"><b>' + esc(title) + '</b>' + (sub ? '<small>' + esc(sub) + '</small>' : '') + '</div>' +
+      '<audio controls preload="metadata"></audio>' +
+      '<button class="miniBtn aud-dl" type="button" title="' + esc(t.download) + '" style="position:static;opacity:1">' + I.download + '</button>' +
+      '</div></div></div>';
+    const au = card.querySelector('audio');
+    const fallbackUrl = (x.url && !/^\/api\/media\//.test(x.url)) ? x.url : '';
+    const ready = u => {
+      const src = u || fallbackUrl;
+      if (!src){ mediaGoneRow(card, I.music); return; }
+      au.onerror = () => {
+        if (src !== fallbackUrl && fallbackUrl){ au.src = fallbackUrl; return; }
+        mediaGoneRow(card, I.music);
+      };
+      au.src = src;
+      card.querySelector('.aud-dl').onclick = () => downloadAsset(src, x.name || 'genisi-audio.mp3');
+    };
+    if (x.id) mediaUrl(x.id).then(ready); else ready(x.url || '');
   } else if (x.kind === 'file'){
     const name = x.name || 'document';
     card.innerHTML = '<div><div class="wc-result"><div class="filerow"><div class="fico">' + I.file + '</div><div class="fmeta"><b>' + esc(name) + '</b><span>' + esc(x.note || '') + '</span></div></div></div></div>';
     const row = card.querySelector('.filerow');
     const mk = (ic, title, fn) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'miniBtn'; b.title = title; b.innerHTML = ic; b.onclick = fn; row.appendChild(b); };
-    mediaGet(x.id).then(rec => {
+    mediaGetOrFetch(x.id).then(rec => {
       if (!rec || !rec.blob){ card.querySelector('.fmeta span').textContent = t.mediaGone; return; }
       if (rec.html && filePreviewHook) mk(I.play, t.preview, () => filePreviewHook({format: rec.format, name: rec.name || name, html: rec.html}));
       mk(I.download, t.download, () => { const u = URL.createObjectURL(rec.blob); dlUrl(u, name); setTimeout(() => URL.revokeObjectURL(u), 60000); });
@@ -2360,13 +2859,15 @@ function detachLiveTurn(){
   live = null;
   if (commitAssistant(l, text)) saveHistory();
 }
+let closeVoiceCallHook = null;
 function goHome(){
   /* v58.38: «محادثة جديدة» كانت تُفرغ S.msgs فقط — فتبقى رسائل الجلسة السابقة في DOM
      (#thread) وتظهر من جديد فوق المحادثة الجديدة (المشكلة المرئية في التسجيل). */
+  if (closeVoiceCallHook) closeVoiceCallHook(true);
   detachLiveTurn();
   S.cur = -1; S.msgs = [];
   $('#thread').innerHTML = '';
-  $('#viewHome').classList.add('on'); $('#viewChat').classList.remove('on');
+  $('#viewHome').classList.add('on'); $('#viewChat').classList.remove('on'); $('#viewVoice').classList.remove('on');
   document.body.classList.remove('in-chat');
   placeComposer(false); renderHomeHero(); renderSessions();
   if (onThreadSwitch) onThreadSwitch();
@@ -2374,6 +2875,7 @@ function goHome(){
 function openSession(i){
   const s = S.sessions[i]; if (!s) return;
   if (i === S.cur && live && S.streaming) return;   // المحادثة الجارية نفسها: لا نقطع بثّها
+  if (closeVoiceCallHook) closeVoiceCallHook(true);
   detachLiveTurn();
   S.cur = i;
   S.msgs = (s.msgs || []).map(m => {
@@ -2384,7 +2886,7 @@ function openSession(i){
     return o;
   });
   s.msgs = S.msgs;
-  $('#viewHome').classList.remove('on'); $('#viewChat').classList.add('on'); placeComposer(true); document.body.classList.add('in-chat');
+  $('#viewHome').classList.remove('on'); $('#viewVoice').classList.remove('on'); $('#viewChat').classList.add('on'); placeComposer(true); document.body.classList.add('in-chat');
   renderThreadStatic(); renderSessions();
   if (onThreadSwitch) onThreadSwitch();
 }
@@ -2396,12 +2898,54 @@ function renderThreadStatic(){
 }
 function addUserBubble(text, atts, silent){
   const d = document.createElement('div'); d.className = 'msg user';
-  const b = document.createElement('div'); b.className = 'bubble'; b.dir = 'auto';
-  b.textContent = text;
-  d.appendChild(b);
+  if (text || !(atts && atts.length)){
+    const b = document.createElement('div'); b.className = 'bubble'; b.dir = 'auto';
+    b.textContent = text;
+    d.appendChild(b);
+  }
   if (atts && atts.length){
     const row = document.createElement('div'); row.className = 'attachRow'; row.style.cssText = 'justify-content:flex-end;margin-top:8px';
-    atts.forEach(a => { const el = document.createElement('div'); el.className = 'attach'; el.innerHTML = (a.mime && a.mime.startsWith('image') && a.url ? '<img src="' + a.url + '">' : '<span class="fname">' + esc(a.name) + '</span>'); row.appendChild(el); });
+    atts.forEach(a => {
+      const el = document.createElement('div'); el.className = 'attach';
+      if (a.expired){
+        el.innerHTML = '<span class="fname att-expired">' + esc((a.name || 'file') + ' — ' + (T().mediaExpired || '')) + '</span>';
+        row.appendChild(el);
+        return;
+      }
+      const isImg = a.mime && a.mime.startsWith('image/');
+      const isVid = a.mime && a.mime.startsWith('video/');
+      const isAud = a.mime && a.mime.startsWith('audio/');
+      const bindAsset = u => {
+        if (!u){
+          el.innerHTML = '<span class="fname">' + esc(a.name || 'file') + '</span>';
+          return;
+        }
+        if (isImg){
+          el.innerHTML = '<img alt="" loading="lazy">';
+          const im = el.querySelector('img');
+          im.src = u; im.style.cursor = 'zoom-in';
+          im.onclick = () => openLightbox(u);
+          im.onerror = () => { el.innerHTML = '<span class="fname">' + esc(a.name || 'image') + '</span>'; };
+        } else if (isVid){
+          el.style.cssText = 'padding:4px;max-width:240px';
+          el.innerHTML = '<video controls playsinline preload="metadata" style="max-width:228px;max-height:150px;border-radius:10px;display:block"></video>';
+          el.querySelector('video').src = u;
+        } else if (isAud){
+          el.style.cssText = 'padding:6px 10px';
+          el.innerHTML = '<audio controls preload="metadata" style="height:34px;max-width:230px"></audio>';
+          el.querySelector('audio').src = u;
+        } else {
+          const lk = document.createElement('a');
+          lk.className = 'att-link'; lk.href = u; lk.download = a.name || 'file';
+          lk.innerHTML = I.file + '<span class="fname">' + esc(a.name || 'file') + '</span>';
+          el.innerHTML = ''; el.appendChild(lk);
+        }
+      };
+      if (a.url && /^blob:/i.test(a.url)) bindAsset(a.url);
+      else if (a.id) mediaUrl(a.id).then(bindAsset);
+      else bindAsset(a.url || '');
+      row.appendChild(el);
+    });
     d.appendChild(row);
   }
   $('#thread').appendChild(d);
@@ -2435,16 +2979,26 @@ function attachActions(msgEl, canRegen){
   if (canRegen) mk(I.regen, T().regen, regenLast, 'regenBtn');
   msgEl.appendChild(row);
 }
-/* v58.63: إعادة التوليد دائماً لآخر جواب فقط (الزر القديم كان يحذف عنصر الرسالة المضغوطة
-   ويقصّ آخر رسالة مساعد من السجل أياً كانت)، وهو متاح أيضاً بعد إعادة فتح المحادثة. */
-function regenLast(){
+/* v58.63+: إعادة التوليد تستعيد أيضاً المرفقات المحفوظة في IndexedDB أو قاعدة البيانات */
+async function regenLast(){
   if (S.streaming) return;
   let ui = -1;
   for (let k = S.msgs.length - 1; k >= 0; k--) if (S.msgs[k].role === 'user'){ ui = k; break; }
   if (ui < 0) return;
-  const um = S.msgs[ui], all = um.atts || [], atts = all.filter(a => a && a.file);
-  /* بعد إعادة التحميل لا تبقى ملفات المرفقات في الذاكرة: نص المستندات محفوظ (um.docs) فيُعاد استخدامه،
-     أما الصور/الفيديو/الصوت فلا — لا نعيد التوليد بسؤال ناقص. */
+  const um = S.msgs[ui], all = um.atts || [];
+  const atts = [];
+  for (const a of all){
+    if (!a) continue;
+    if (a.file){ atts.push(a); continue; }
+    if (a.id && !a.expired){
+      const rec = await mediaGetOrFetch(a.id);
+      if (rec && rec.blob){
+        const f = new File([rec.blob], a.name || rec.name || 'file', {type: a.mime || rec.mime || rec.blob.type || 'application/octet-stream'});
+        a.file = f;
+        atts.push(a);
+      }
+    }
+  }
   const lostMedia = all.some(a => a && !a.file && /^(image|video|audio)\//i.test(a.mime || ''));
   if (lostMedia || (!String(um.content || '').trim() && !atts.length && !um.docs)){ toast(T().attGone, true); return; }
   mediaDel(mediaIdsOf(S.msgs.splice(ui + 1)));
@@ -2661,7 +3215,7 @@ $('#brand').onclick = goHome;
 /* ═══════════════════════════ popovers ═══════════════════════════ */
 let popOpen = null;
 function closePops(){ document.querySelectorAll('.pop').forEach(p => p.classList.remove('on')); popOpen = null; }
-document.addEventListener('click', e => { if (popOpen && !e.target.closest('.pop') && !e.target.closest('#modelBtn') && !e.target.closest('#toolsBtn') && !e.target.closest('#kebabBtn') && !e.target.closest('#avatarBtn') && !e.target.closest('#acctBtn') && !e.target.closest('#planBtn')) closePops(); });
+document.addEventListener('click', e => { if (popOpen && !e.target.closest('.pop') && !e.target.closest('#modelBtn') && !e.target.closest('#voiceModelBtn') && !e.target.closest('#toolsBtn') && !e.target.closest('#kebabBtn') && !e.target.closest('#avatarBtn') && !e.target.closest('#acctBtn') && !e.target.closest('#planBtn')) closePops(); });
 function openPop(sel, anchor, items){
   const pop = $(sel);
   const was = pop.classList.contains('on');
@@ -3067,6 +3621,11 @@ function hideSoftStatus(){
 }
 function makeWaitCard(info, tool, args){
   const card = document.createElement('div'); card.className = 'waitcard';
+  if (/image|img|photo|draw|paint/i.test(String(tool || ''))){
+    card.classList.add('img-square');
+    card.innerHTML = '<div class="wc-stage"></div>';
+    return card;
+  }
   card.innerHTML =
     '<div class="wc-stage' + (info.tall ? ' tall' : '') + '">' +
       '<div class="wc-sheen"></div>' +
@@ -3105,8 +3664,7 @@ function resolveWaitCard(result){
     st.innerHTML = '<span class="orb" style="animation:none;border-color:var(--ok);display:grid;place-items:center">' + I.okCircle + '</span><span>' + esc(info.done || T().doneGeneric) + '</span>';
   }
   if (bad && !card.querySelector('.wc-result')){
-    // v58.35: فشل دخل بطاقة الوسائط — تنطوي البطاقة إلى صف خطأ موجز
-    // بدل كرت عملاق عرض مصراعه «حقول مطلوبة: html» في منتصف الجنون
+    card.classList.add('is-err');
     const stage = card.querySelector('.wc-stage');
     const _msg = String(result.error || result.message || T().failed).slice(0, 220);
     const core = stage.querySelector('.wc-core'); if (core) core.remove();
@@ -3141,11 +3699,19 @@ function resolveWaitCard(result){
     inner = document.createElement('div'); inner.className = 'wc-result';
     inner.innerHTML = actions(url) + '<video src="' + esc(url) + '" controls playsinline></video>';
     if (!live.cardUrls.includes(url)) live.cardUrls.push(url);
-    rememberMedia('video', url, null, (card._args && card._args.ratio) ? {ratio: String(card._args.ratio)} : null);
-  } else if (url && (res.special === 'audio' || /\.(mp3|wav|ogg)(\?|$)/i.test(url))){
+    rememberMedia('video', url, res.blob || null, (card._args && card._args.ratio) ? {ratio: String(card._args.ratio)} : null);
+  } else if (url && (res.special === 'audio' || /\.(mp3|wav|ogg|flac|m4a|aac|opus)(\?|$)/i.test(url))){
+    const mTitle = res.title || (card._args && card._args.title) || (S.lang === 'ar' ? 'مقطوعة موسيقية — StepAudio 3' : 'StepAudio 3 Track');
+    const mCap = res.caption || (card._args && (card._args.caption || card._args.prompt)) || '';
     inner = document.createElement('div'); inner.className = 'wc-result';
-    inner.innerHTML = '<div class="aud"><div class="disc">' + I.music.replace('class="ic sm"', 'width="22" height="22"') + '</div><audio src="' + esc(url) + '" controls></audio>' + actions(url) + '</div>';
+    inner.innerHTML = '<div class="aud">' +
+      '<div class="disc">' + I.music.replace('class="ic sm"', 'width="22" height="22"') + '</div>' +
+      '<div class="aud-meta"><b>' + esc(mTitle) + '</b>' + (mCap ? '<small>' + esc(mCap) + '</small>' : '') + '</div>' +
+      '<audio src="' + esc(url) + '" controls preload="metadata"></audio>' +
+      '<button class="miniBtn" data-dl="' + esc(url) + '" title="' + esc(T().download) + '" style="position:static;opacity:1">' + I.download + '</button>' +
+      '</div>';
     if (!live.cardUrls.includes(url)) live.cardUrls.push(url);
+    rememberMedia('audio', url, res.blob || null, {title: mTitle, caption: mCap.slice(0, 240), name: (mTitle.replace(/[^\w\u0600-\u06FF -]+/g, '').trim() || 'genisi-music') + '.mp3'});
   } else if (path || res.message || url){
     const fname = path ? path.split('/').pop() : (res.name || url.split('/').pop() || 'file');
     const isHtml = /\.html?(\?|$)/i.test(path || url || '');
@@ -3163,7 +3729,7 @@ function resolveWaitCard(result){
     stage.style.aspectRatio = 'auto';
     stage.className = '';
     stage.appendChild(inner);
-    if (card.querySelector('.wc-result img, .wc-result video')){
+    if (card.querySelector('.wc-result img, .wc-result video, .wc-result audio')){
       const f = card.querySelector('.wc-foot'); if (f) f.style.display = 'none';
     }
     inner.querySelectorAll('[data-dl]').forEach(b => b.onclick = () => downloadAsset(b.dataset.dl, 'genisi'));
@@ -4254,12 +4820,14 @@ renderAvatar = function(){ _ra(); const s = $('#sbProfileSub'); if (s && !S.user
 $('#toolsBtn').onclick = e => {
   const t = T(), ar = S.lang === 'ar';
   openPop('#toolsPop', e.currentTarget, [
+    {ic: I.live, label: t.tVoiceCall, fn: () => { if (openVoiceCallHook) openVoiceCallHook(); }},
+    {ic: I.image, label: t.tImage, fn: () => ins(t.pImage)},
+    {ic: I.video, label: t.tVideo, fn: () => ins(t.pVideo)},
+    {ic: I.music, label: t.tMusic, fn: () => ins(t.pMusic)},
     {ic: I.globe, label: t.tSearch, fn: () => ins(t.pSearch)},
     {ic: I.sigma, label: t.tLatex, fn: () => ins(t.pLatex)},
     {ic: I.mermaid, label: t.tChart, fn: () => ins(t.pChart)},
     {ic: I.doc, label: t.tDoc, fn: () => ins(t.pDoc)},
-    {ic: I.image, label: t.tImage, fn: () => ins(t.pImage)},
-    {ic: I.video, label: t.tVideo, fn: () => ins(t.pVideo)},
     {ic: I.file, label: t.tFile, fn: () => ins(t.pFile)},
     {ic: I.sliders, label: state.deep ? t.deepOff : t.deepOn, fn: () => { state.deep = !state.deep; saveState(); toast(state.deep ? t.deepOnMsg : t.deepOffMsg); }},
     {sep: 1},
@@ -4319,8 +4887,10 @@ const MEDIA_LINES = [
   "- image_gen {\"prompt\":\"rich, detailed English prompt\",\"model\":\"DALL-E\"}   (create a new image)",
   "- image_edit {\"prompt\":\"what to change, e.g. enhance\",\"image\":\"https://... or attached or last\"}   (edit an image: a public URL, \\\"attached\\\" = the image the user attached, \\\"last\\\" = the last generated/edited image)",
   "- video_gen {\"prompt\":\"detailed English scene description\",\"ratio\":\"auto\",\"sound\":true}   (ratio: auto, 1:1, 16:9 or 9:16)",
+  "- music_gen {\"task\":\"text_to_music\",\"title\":\"Track title\",\"caption\":\"detailed English music style, genre, instruments, tempo BPM, mood, vocal timbre\",\"lyrics\":\"[Verse]\\n...\\n[Chorus]\\n...\",\"instrumental\":false,\"duration\":60}   (StepAudio-3-Music: compose songs or instrumental music; task: text_to_music | vocal_to_music | music_cover; write lyrics in the language the user asked for, or set instrumental:true and lyrics:\"[Instrumental]\" for pure music)",
   "MEDIA PROMPT STANDARD (mandatory for image_gen, image_edit and video_gen): the \"prompt\" value MUST be written in ENGLISH ONLY, even when the user writes Arabic or any other language, and it MUST be an exact, production-grade, single-paragraph prompt of 80-180 words. Never send a short or vague prompt and never copy the user's sentence as it is. Preserve EVERY detail the user gave (subjects, counts, colors, names, positions, clothing, text to render, mood, style) and then add precise professional detail in this order: (1) main subject with exact physical description, age/material/shape/colors/textures; (2) action or pose and expression; (3) environment and background with depth layers (foreground / midground / background); (4) composition and framing (shot type, angle, rule of thirds, subject placement); (5) camera and lens (e.g. 35mm / 85mm f/1.8, shallow depth of field) ; (6) lighting (type, direction, color temperature, contrast, rim/key/fill); (7) color palette and grading; (8) art style or medium (photorealistic, 3D render, anime, oil painting...) ; (9) quality terms (ultra-detailed, sharp focus, 8K, high dynamic range, natural skin texture, correct anatomy); (10) exclusions written positively inside the prompt (clean image, no text artifacts, no watermark, no extra limbs, no distortion). Any text that must appear inside the image goes in double quotes, spelled exactly. For video_gen ALSO describe, in chronological order: opening frame, the continuous motion/action beat by beat, camera movement (static, slow dolly-in, pan, orbit, handheld), subject speed, lighting changes, physics realism, temporal consistency (same character and outfit in every frame, no morphing, no scene cuts) and, if sound is true, the ambient sound / music / dialogue. For image_edit state exactly what to change and add \"keep the subject identity, pose, composition, lighting and every other element unchanged\". Do not invent a different subject than the user asked for.",
-  "Every media call MUST include the \"prompt\" key with a non-empty description. Media tools show their result to the user automatically inside a card: never print their URL and never re-embed the media; just comment briefly. Use at most ONE media tool per reply.",
+  "For music_gen, always provide a rich English \"caption\" describing genre, instrumentation, BPM, production style, and mood, plus structured \"lyrics\" ([Verse], [Chorus]) in the user's requested language unless instrumental:true.",
+  "Every image_gen/image_edit/video_gen call MUST include \"prompt\" and every music_gen call MUST include \"caption\". Media tools show their result to the user automatically inside a card: never print their URL and never re-embed the media; just comment briefly. Use at most ONE media tool per reply.",
   ""
 ].join("\n");
 AGENT_PROMPT = AGENT_PROMPT.replace("Answer in the user's language.", MEDIA_LINES + "Answer in the user's language.");
@@ -4439,8 +5009,10 @@ function lib(k){
   }));
 }
 
-/* ================= media tools (image_gen / image_edit / video_gen) ================= */
-const MEDIA_KIND = {image_gen: 'image', image_edit: 'image', video_gen: 'video'};
+/* ================= media tools (image_gen / image_edit / video_gen / music_gen) ================= */
+const STEPAUDIO_SPACE_URL = 'https://stepfun-ai-stepaudio-3-music.hf.space';
+const VOXCPM_SPACE_URL = 'https://openbmb-voxcpm-demo.hf.space';
+const MEDIA_KIND = {image_gen: 'image', image_edit: 'image', video_gen: 'video', music_gen: 'audio'};
 let lastGenerated = '', lastAttachedFile = null, lastGeneratedBlob = null;
 async function fetchCors(url, ms){
   const custom = (localStorage.getItem('g3_cors') || '').trim();
@@ -4474,6 +5046,13 @@ function findMediaUrl(o, kind, depth){
     const v = o.trim();
     if (/^https?:\/\//i.test(v)) return v;
     if (/^\/\/[\w.-]+\.[a-z]{2,}\//i.test(v)) return 'https:' + v;
+    if (kind === 'audio' && /^\/(v1|outputs|files|audio|gradio_api)\//i.test(v)) return STEPAUDIO_SPACE_URL + v;
+    if (kind === 'audio' && /^data:audio\/[a-z0-9+.-]+;base64,/i.test(v)) return v;
+    if (kind === 'audio' && v.length > 600 && /^[A-Za-z0-9+\/=\s]+$/.test(v)){
+      const cleanB64 = v.replace(/\s+/g, '');
+      const amime = cleanB64.startsWith('UklGR') ? 'wav' : cleanB64.startsWith('T2dnUw') ? 'ogg' : cleanB64.startsWith('ZkxhQw') ? 'flac' : 'mpeg';
+      return 'data:audio/' + amime + ';base64,' + cleanB64;
+    }
     if (kind === 'image' && /^data:image\/[a-z+.-]+;base64,/i.test(v)) return v;
     if (kind === 'image' && v.length > 400 && /^[A-Za-z0-9+\/=\s]+$/.test(v)){
       const mime = v.startsWith('iVBOR') ? 'png' : v.startsWith('/9j/') ? 'jpeg' : v.startsWith('UklGR') ? 'webp' : '';
@@ -4485,6 +5064,8 @@ function findMediaUrl(o, kind, depth){
   if (typeof o === 'object'){
     const pri = kind === 'video'
       ? ['video_url', 'videoUrl', 'video', 'url', 'output', 'result', 'download_url', 'link', 'data']
+      : kind === 'audio'
+      ? ['audio_url', 'audioUrl', 'music_url', 'url', 'audio', 'audio_base64', 'tracks', 'results', 'output', 'result', 'download_url', 'data']
       : ['image_url', 'imageUrl', 'image', 'url', 'output', 'result', 'link', 'images', 'data'];
     for (const k of pri) if (k in o){ const r = findMediaUrl(o[k], kind, depth + 1); if (r) return r; }
     for (const k in o){ const r = findMediaUrl(o[k], kind, depth + 1); if (r) return r; }
@@ -4591,17 +5172,190 @@ async function refineOnce(name, prompt, args){
     return out;
   } catch(e){ try { console.warn('[refine]', e); } catch(_){} return null; }
 }
+function formatStepAudioErr(obj, status){
+  if (obj && typeof obj === 'object'){
+    if (typeof obj.detail === 'string' && obj.detail.trim()) return obj.detail.trim();
+    const err = obj.error || (obj.data && obj.data.error);
+    if (err && typeof err === 'object'){
+      const stage = String(err.stage || '').trim();
+      const type = String(err.type || '').trim();
+      const msg = String(err.message || '').trim();
+      if (type === 'rate_limited' || status === 429) return 'خدمة تأليف الموسيقى مشغولة حالياً (حد الطلبات بالدقيقة) — أعد المحاولة بعد دقيقة.';
+      if (stage === 'censor') return 'تعذّر إتمام الطلب بسبب قيود محتوى الخدمة — جرّب وصفاً أو كلمات مختلفة.';
+      if (stage === 'no_speech_detected') return 'لم يُكتشف صوت غنائي واضح في التسجيل المرفق.';
+      if (stage === 'audio_transcode') return 'تعذّرت قراءة صيغة الملف الصوتي المرفق — جرّب ملف MP3 أو WAV.';
+      if (msg && type) return msg + ' (' + type + ')';
+      if (msg || type || stage) return msg || type || stage;
+    }
+    if (typeof err === 'string' && err.trim()) return err.trim();
+    if (typeof obj.message === 'string' && obj.message.trim()) return obj.message.trim();
+  }
+  return 'StepAudio HTTP ' + (status || 'error');
+}
+async function postStepAudioJson(relPath, payload, timeoutMs){
+  const bodyStr = JSON.stringify(payload || {});
+  const proxyMap = {'/v1/audio/music/submit': '/api/music/submit', '/v1/audio/music/query': '/api/music/query'};
+  const localEndpoint = location.protocol !== 'file:' ? proxyMap[relPath] : null;
+  if (localEndpoint){
+    let proxyErr = null;
+    try {
+      const hdrs = {'Content-Type': 'application/json'};
+      const csrfPart = document.cookie.split('; ').find(x => x.startsWith('genisi_csrf='));
+      if (csrfPart) hdrs['X-CSRF-Token'] = decodeURIComponent(csrfPart.slice('genisi_csrf='.length));
+      const lr = await fetchTimeout(localEndpoint, {
+        method: 'POST',
+        headers: hdrs,
+        body: bodyStr,
+        credentials: 'same-origin'
+      }, timeoutMs || 240000);
+      const ltxt = await lr.text();
+      let lj = null; try { lj = JSON.parse(ltxt); } catch(e){}
+      if (lr.ok && lj) return lj;
+      if (lr.status >= 400 && lr.status < 500 && lr.status !== 404){
+        proxyErr = new Error(formatStepAudioErr(lj, lr.status));
+      }
+    } catch(e){
+      if (e && e.name === 'AbortError') throw e;
+    }
+    if (proxyErr) throw proxyErr;
+  }
+  const direct = await fetchTimeout(STEPAUDIO_SPACE_URL + relPath, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: bodyStr
+  }, timeoutMs || 240000);
+  const dtxt = await direct.text();
+  let dj = null; try { dj = JSON.parse(dtxt); } catch(e){}
+  if (!direct.ok){
+    throw new Error(formatStepAudioErr(dj, direct.status));
+  }
+  return dj || {};
+}
+function blobToBase64Raw(blob){
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result || '').replace(/^data:[^,]+,/, ''));
+    fr.onerror = () => rej(new Error('تعذّر قراءة الملف الصوتي'));
+    fr.readAsDataURL(blob);
+  });
+}
+async function base64AudioToBlob(b64, fmt){
+  const clean = String(b64 || '').replace(/^data:[^,]+,/, '').replace(/\s+/g, '');
+  const mimeMap = {mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', opus: 'audio/ogg; codecs=opus'};
+  const mime = mimeMap[String(fmt || 'mp3').toLowerCase()] || 'audio/mpeg';
+  const r = await fetch('data:' + mime + ';base64,' + clean);
+  return await r.blob();
+}
+async function runStepAudioMusic(args, fallbackPrompt, phase){
+  let task = String(args.task || 'text_to_music').trim().toLowerCase();
+  if (!['text_to_music', 'vocal_to_music', 'music_cover'].includes(task)) task = 'text_to_music';
+  const caption = String(args.caption || args.style || fallbackPrompt || '').trim().slice(0, 500);
+  if (!caption) throw new Error('وصف الموسيقى (caption) مفقود.');
+  const instrumental = Boolean(args.instrumental);
+  let cleanLyrics = String(args.lyrics || '').trim().slice(0, 4000);
+  if (/^\[?instrumental\]?$/i.test(cleanLyrics)) cleanLyrics = '';
+  const title = String(args.title || args.name || '').trim().slice(0, 120) || (S.lang === 'ar' ? 'مقطوعة موسيقية — StepAudio 3' : 'StepAudio 3 Track');
+
+  // Official stepfun-ai/StepAudio-3-Music payload contract (strictly validated upstream)
+  const payload = {
+    model_id: 'step-music',
+    response_format: 'mp3',
+    sample_rate: 44100,
+    bit_rate: 192,
+    task: task,
+    caption: caption
+  };
+
+  if (task === 'vocal_to_music' || task === 'music_cover'){
+    let audFile = null;
+    const lastMsg = S.msgs.slice().reverse().find(m => m && m.role === 'user' && Array.isArray(m.atts));
+    if (lastMsg){
+      const att = lastMsg.atts.find(a => a && a.file && /^audio\//i.test(a.mime || ''));
+      if (att) audFile = att.file;
+    }
+    if (audFile){
+      const rawB64 = await blobToBase64Raw(audFile);
+      if (task === 'vocal_to_music') payload.vocal_audio = rawB64;
+      else payload.song_audio = rawB64;
+      if (cleanLyrics) payload.lyrics = cleanLyrics;
+    } else {
+      task = 'text_to_music';
+      payload.task = 'text_to_music';
+    }
+  }
+  if (task === 'text_to_music'){
+    if (instrumental) payload.instrumental = true;
+    else if (cleanLyrics) payload.lyrics = cleanLyrics;
+  }
+
+  phase(1);
+  const sub = await postStepAudioJson('/v1/audio/music/submit', payload, 240000);
+  let blob = null, audioOut = '';
+  if (typeof sub.audio === 'string' && sub.audio.length > 100 && !/^https?:\/\//i.test(sub.audio)){
+    blob = await base64AudioToBlob(sub.audio, sub.response_format || 'mp3');
+  } else {
+    audioOut = findMediaUrl(sub, 'audio');
+  }
+  const taskId = String(sub.task_id || sub.taskId || sub.id || (sub.data && (sub.data.task_id || sub.data.id)) || '').trim();
+  if (!blob && !audioOut && !taskId){
+    throw new Error(formatStepAudioErr(sub, 0) || 'لم يُرجع StepAudio-3-Music معرّف مهمة صالحاً.');
+  }
+  let rewrittenLyrics = typeof sub.rewritten_lyrics === 'string' ? sub.rewritten_lyrics : '';
+  if (!blob && !audioOut && taskId){
+    phase(2);
+    const t0 = Date.now();
+    while (!blob && !audioOut && Date.now() - t0 < 480000 && !ai.stopLoop){
+      const elapsed = Date.now() - t0;
+      await sleep(elapsed >= 180000 ? 10000 : elapsed >= 60000 ? 6000 : 3000);
+      const qj = await postStepAudioJson('/v1/audio/music/query', {task_id: taskId}, 45000);
+      const st = String(qj.status || qj.state || (qj.data && (qj.data.status || qj.data.state)) || '').toUpperCase();
+      if (['FAILED', 'ERROR', 'CANCELLED', 'CANCELED'].includes(st)){
+        throw new Error(formatStepAudioErr(qj, 0));
+      }
+      if (typeof qj.rewritten_lyrics === 'string' && qj.rewritten_lyrics) rewrittenLyrics = qj.rewritten_lyrics;
+      const b64 = (typeof qj.audio === 'string' && qj.audio) ? qj.audio : (qj.data && typeof qj.data.audio === 'string' ? qj.data.audio : '');
+      if ((st === 'SUCCESS' || st === 'COMPLETED' || b64.length > 256) && b64 && !/^https?:\/\//i.test(b64)){
+        blob = await base64AudioToBlob(b64, qj.response_format || 'mp3');
+        break;
+      }
+      audioOut = findMediaUrl(qj, 'audio');
+    }
+  }
+  if (!blob && !audioOut) throw new Error('انتهت مهلة انتظار توليد الموسيقى — أعد المحاولة.');
+  phase(3);
+  let finalUrl = '';
+  if (blob && blob.size > 256){
+    finalUrl = URL.createObjectURL(blob);
+  } else if (audioOut){
+    if (/^http:\/\//i.test(audioOut)) audioOut = audioOut.replace(/^http:/i, 'https:');
+    finalUrl = audioOut;
+    try {
+      const ar = await fetchTimeout(audioOut, null, 45000);
+      if (ar.ok){
+        const ab = await ar.blob();
+        if (ab && ab.size > 256){
+          blob = ab.type && /^audio\//i.test(ab.type) ? ab : new Blob([ab], {type: 'audio/mpeg'});
+          finalUrl = URL.createObjectURL(blob);
+        }
+      }
+    } catch(e){}
+  }
+  const out = {url: finalUrl, remoteUrl: audioOut || undefined, blob: blob, special: 'audio', title: title, caption: caption, request_id: taskId, prompt: caption};
+  if (rewrittenLyrics) out.rewritten_lyrics = rewrittenLyrics;
+  return out;
+}
 async function runMedia(name, args, phase){
   phase = phase || (() => {});
   args = args || {};
   let prompt = '';
-  for (const k of ['prompt', 'description', 'desc', 'text', 'query', 'caption', 'instruction', 'edit', 'scene', 'idea', 'q'])
+  for (const k of ['prompt', 'caption', 'description', 'desc', 'text', 'query', 'style', 'instruction', 'edit', 'scene', 'idea', 'q'])
     if (typeof args[k] === 'string' && args[k].trim()){ prompt = args[k].trim(); break; }
   if (!prompt){
     const hu = state.history.slice().reverse().find(m => m.role === 'user' && !/^\[TOOL_RESULT/.test(m.content || ''));
     prompt = hu ? String(hu.content).trim().slice(0, 600) : '';
   }
   if (!prompt) throw new Error('الوصف (prompt) مفقود — اكتب وصف ما تريده.');
+  if (name === 'music_gen') return runStepAudioMusic(args, prompt, phase);
   const kind = MEDIA_KIND[name], enc = encodeURIComponent;
   phase(1);
   prompt = (await refineMediaPrompt(name, prompt, args)).slice(0, name === 'video_gen' ? 1100 : name === 'image_edit' ? 900 : 1800);
@@ -4681,13 +5435,22 @@ async function mediaRunUI(call){
     core.appendChild(hint);
     phase = n => steps.querySelectorAll('span').forEach(sp => { const k = +sp.dataset.s; sp.className = k < n ? 'done' : (k === n ? 'on' : ''); });
     phase(1);
+  } else if (MEDIA_KIND[name] === 'audio'){
+    const core = card.querySelector('.wc-core');
+    if (core){
+      const steps = document.createElement('div'); steps.className = 'vsteps';
+      steps.innerHTML = '<span data-s="1">إرسال الطلب</span><span data-s="2">التأليف الموسيقي</span><span data-s="3">التجهيز</span>';
+      core.appendChild(steps);
+      phase = n => steps.querySelectorAll('span').forEach(sp => { const k = +sp.dataset.s; sp.className = k < n ? 'done' : (k === n ? 'on' : ''); });
+      phase(1);
+    }
   }
   try {
     const r = await runMedia(name, args, phase);
-    lastGenerated = r.url;
-    resolveWaitCard({url: r.url, blob: r.blob, special: r.special, request_id: r.request_id, prompt: r.prompt});
-    return "[TOOL_RESULT name=" + name + "]:\nتم التوليد وعُرض " + (r.special === 'video' ? 'الفيديو' : 'الصورة') +
-      " للمستخدم داخل بطاقة في المحادثة. لا تكتب الرابط ولا تعرض الوسيط ثانية؛ علّق باختصار أو اسأل إن أراد تعديلاً. (لتعديل الصورة لاحقاً استخدم image_edit مع image=last)";
+    if (r.special === 'image' || r.special === 'video') lastGenerated = r.url;
+    resolveWaitCard({url: r.url, remoteUrl: r.remoteUrl, blob: r.blob, special: r.special, title: r.title, caption: r.caption, request_id: r.request_id, prompt: r.prompt});
+    return "[TOOL_RESULT name=" + name + "]:\nتم التوليد وعُرض " + (r.special === 'video' ? 'الفيديو' : r.special === 'audio' ? 'المقطع الموسيقي' : 'الصورة') +
+      " للمستخدم داخل بطاقة في المحادثة. لا تكتب الرابط ولا تعرض الوسيط ثانية؛ علّق باختصار أو اسأل إن أراد تعديلاً." + (r.special === 'image' ? " (لتعديل الصورة لاحقاً استخدم image_edit مع image=last)" : "");
   } catch(e){
     const msg = ai.stopLoop ? T().stopped : ((e && e.message) || String(e));
     resolveWaitCard({error: msg});
@@ -4927,12 +5690,16 @@ onThreadSwitch = function(){
   /* «آخر صورة» تخص المحادثة المفتوحة: لا تُعدَّل صورة من محادثة أخرى، وتُستعاد آخر صورة مولَّدة عند إعادة الفتح */
   lastGenerated = ''; lastAttachedFile = null; lastGeneratedBlob = null;
   const msgs = S.msgs;
+  if (touchMediaDbHook){
+    const ids = mediaIdsOf(msgs);
+    for (const id of ids) touchMediaDbHook(id);
+  }
   let entry = null;
   for (let i = msgs.length - 1; i >= 0 && !entry; i--){
     const md = msgs[i].media || [];
     for (let k = md.length - 1; k >= 0; k--) if (md[k] && md[k].kind === 'image' && md[k].id){ entry = md[k]; break; }
   }
-  if (entry) mediaGet(entry.id).then(rec => {
+  if (entry) mediaGetOrFetch(entry.id).then(rec => {
     if (!rec || !rec.blob || S.msgs !== msgs || lastGeneratedBlob) return;
     lastGeneratedBlob = rec.blob;
     mediaUrl(entry.id).then(u => { if (u && S.msgs === msgs && !lastGenerated) lastGenerated = u; });
@@ -4947,8 +5714,27 @@ function lsDel(k){try{localStorage.removeItem(k);}catch(e){}}
 function packSessions(limit){
   return S.sessions.slice(-40).map(s=>({title:String(s.title||'').slice(0,60),ts:Number(s.ts)||0,msgs:(s.msgs||[]).slice(-60).map(m=>{
     const o={role:m.role,content:String(m.content||'').slice(0,limit||60000)};
-    if(Array.isArray(m.media)&&m.media.length)o.media=m.media.slice(0,12).map(x=>Object.assign({},x));
-    if(Array.isArray(m.atts)&&m.atts.length)o.atts=m.atts.slice(0,6).map(a=>({name:String(a.name||'').slice(0,120),mime:String(a.mime||'')}));
+    if(Array.isArray(m.media)&&m.media.length){
+      o.media=m.media.slice(0,12).map(x=>{
+        const c=Object.assign({},x);
+        if(c.url&&/^blob:/i.test(c.url)) c.url=c.id?('/api/media/'+c.id):'';
+        return c;
+      });
+    }
+    if(Array.isArray(m.atts)&&m.atts.length){
+      o.atts=m.atts.slice(0,6).map(a=>{
+        const aid=a.id?String(a.id).slice(0,64):'';
+        const rawUrl=String(a.dbUrl||a.url||'');
+        const safeUrl=/^blob:/i.test(rawUrl)?(aid?'/api/media/'+aid:''):rawUrl.slice(0,500);
+        const rec={name:String(a.name||'').slice(0,120),mime:String(a.mime||'').slice(0,120)};
+        if(aid) rec.id=aid;
+        if(a.kind) rec.kind=String(a.kind).slice(0,24);
+        if(Number.isFinite(Number(a.size))&&Number(a.size)>0) rec.size=Math.round(Number(a.size));
+        if(safeUrl) rec.url=safeUrl;
+        if(a.expired) rec.expired=true;
+        return rec;
+      });
+    }
     if(m.docs)o.docs=String(m.docs).slice(0,Math.min(limit||60000,30000));
     return o;
   })}));
@@ -5151,8 +5937,8 @@ $('#setClose').addEventListener('click', () => { saveState(); });
      ويرفض طلبات الصور («لا أستطيع توليد صور»). الآن يستلم الصيغة الفعلية وقائمة الأدوات الكاملة (AGENT_PROMPT). */
   const QWEN_CHAT_TOOLS_PROMPT = [
     'GENISI TOOLS (executed for you by the host interface)',
-    'Use a tool only when the task genuinely needs it: current or time-sensitive information, an exact calculation or conversion, a retrieved page, a chart, or creating/editing an image or creating a video. If no tool is needed, answer directly. Never fabricate a tool result.',
-    'You CAN create images, edit images and create videos through image_gen, image_edit and video_gen: when the user asks for one, call the tool — never answer that you cannot generate images or videos.',
+    'Use a tool only when the task genuinely needs it: current or time-sensitive information, an exact calculation or conversion, a retrieved page, a chart, creating/editing an image, creating a video, or composing music/songs. If no tool is needed, answer directly. Never fabricate a tool result.',
+    'You CAN create images, edit images, create videos, and compose music/songs through image_gen, image_edit, video_gen, and music_gen: when the user asks for one, call the tool — never answer that you cannot generate images, videos, or music.',
     'The ONLY accepted call syntax is the fenced ```tool block described below. Do not use <tool_call> tags or any other function-call format.',
     AGENT_PROMPT.replace('- random {', '- image_search {"query":"..."}   (reference photos from Wikimedia Commons, shown to the user as a grid)\n- random {')
   ].join('\n');
@@ -5949,10 +6735,17 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     for(const a of atts||[]){
       const mime=String(a.mime||'');
       let file=a.file instanceof File?a.file:null;
-      if(!file){
-        const blob=await(await fetch(a.url)).blob();
-        file=new File([blob],a.name||'file',{type:mime||blob.type||'application/octet-stream'});
+      if(!file && a.id){
+        const rec=await mediaGetOrFetch(a.id);
+        if(rec && rec.blob) file=new File([rec.blob],a.name||'file',{type:mime||rec.mime||rec.blob.type||'application/octet-stream'});
       }
+      if(!file && a.url){
+        try{
+          const blob=await(await fetch(a.url,{credentials:'same-origin'})).blob();
+          file=new File([blob],a.name||'file',{type:mime||blob.type||'application/octet-stream'});
+        }catch(e){}
+      }
+      if(!file){ failed++; continue; }
       if(/^image\//i.test(mime)){ if(!files.image) files.image=file; else skipped++; }
       else if(/^video\//i.test(mime)){ if(!files.video) files.video=file; else skipped++; }
       else if(/^audio\//i.test(mime)){
@@ -5981,6 +6774,81 @@ $('#setClose').addEventListener('click', () => { saveState(); });
       else if(trunc) toast(T().docTrunc);
     }catch(e){}
     return {files,docs};
+  };
+
+  ai.discoverGradio = discoverGradio;
+  ai.uploadFilesToSpace = uploadFilesToSpace;
+  ai.voiceTurn = async function(opts){
+    opts = opts || {};
+    const route = routeProfile();
+    const meta = await discoverGradio(route.space, route.endpoint);
+    const signal = opts.signal;
+    const files = {};
+    if (opts.audio instanceof File) files.audio = opts.audio;
+    if (opts.image instanceof File) files.image = opts.image;
+    if (opts.video instanceof File) files.video = opts.video;
+    const up = await uploadFilesToSpace(meta, files, signal);
+    const hist = (Array.isArray(opts.history) ? opts.history : []).slice(-18).map(m => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: String(m.content || '')
+    })).filter(m => m.content.trim());
+    const sys = String(opts.system || '') || (ATLAS_CORE + '\n\n' + OUTPUT_QUALITY_GUARD + '\n\n' + timeBlock());
+    const msg = String(opts.text || '') + (opts.docs ? String(opts.docs) : '');
+    const data = [
+      msg,
+      up.audio || null,
+      up.image || null,
+      up.video ? {video: up.video, subtitles: null} : null,
+      hist,
+      sys,
+      0.55,
+      0.85,
+      25
+    ];
+    const callUrl = meta.space + meta.prefix + '/call/' + encodeURIComponent(meta.endpoint);
+    const r0 = await fetch(callUrl, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      credentials: 'omit',
+      signal: signal,
+      body: JSON.stringify({data: data})
+    });
+    const j0 = await r0.json();
+    if (!r0.ok || !j0 || !j0.event_id) throw new Error('تعذّر بدء جلسة المحادثة الصوتية');
+    const stream = await fetch(callUrl + '/' + encodeURIComponent(j0.event_id), {credentials: 'omit', signal: signal});
+    if (!stream.ok || !stream.body) throw new Error('انقطع بث المحادثة الصوتية');
+    const reader = stream.body.getReader(), dec = new TextDecoder();
+    let buf = '', latest = '', done = false;
+    const parseBlk = blk => {
+      let ev = '';
+      const ds = [];
+      for (const line of blk.replace(/\r/g, '').split('\n')){
+        if (line.startsWith('event:')) ev = line.slice(6).trim();
+        else if (line.startsWith('data:')) ds.push(line.slice(5).trim());
+      }
+      if (ev === 'error') throw new Error('خطأ من مزوّد المحادثة');
+      if (ev !== 'generating' && ev !== 'complete') return;
+      try {
+        const txt = qwenAssistantText(JSON.parse(ds.join('\n')));
+        if (txt !== null){
+          latest = txt;
+          if (typeof opts.onDelta === 'function') opts.onDelta(latest);
+        }
+      } catch(e){}
+      if (ev === 'complete') done = true;
+    };
+    while (!done){
+      const ch = await reader.read();
+      if (ch.done) break;
+      buf += dec.decode(ch.value, {stream: true});
+      let ix;
+      while ((ix = buf.indexOf('\n\n')) >= 0){
+        const blk = buf.slice(0, ix); buf = buf.slice(ix + 2);
+        parseBlk(blk);
+      }
+    }
+    if (!done && buf.trim()) parseBlk(buf);
+    return latest;
   };
 
   runTurn=async function(text,files,stage){
@@ -6025,7 +6893,10 @@ $('#setClose').addEventListener('click', () => { saveState(); });
       if(!text&&!S.attachments.length)return;
       atts=S.attachments.splice(0,S.attachments.length);renderAttach();
       const um={role:'user',content:text};
-      if(atts.length) um.atts=atts.map(a=>({name:a.name,mime:a.mime,url:a.url,file:a.file}));
+      if(atts.length) um.atts=atts.map(a=>({
+        id:a.id,kind:a.kind,name:a.name,mime:a.mime,size:a.size,
+        url:a.url,dbUrl:a.dbUrl||(a.id?'/api/media/'+a.id:''),file:a.file
+      }));
       addUserBubble(text,um.atts);
       S.msgs.push(um);syncWritingDirection(text);input.value='';autoGrow();
     }
@@ -6202,6 +7073,7 @@ doAuth = async function(){
       if(Array.isArray(guest)&&guest.length){try{await api('/api/history/save',{method:'POST',body:JSON.stringify({sessions:guest})});localStorage.removeItem('g3_guest_sessions');localStorage.removeItem('g3_sessions');}catch(e){}}
     }
     await Promise.all([loadHistory(),loadPreferences(),loadWorkspace(),loadAgent()]);
+    syncPendingSessionMedia();
     renderAvatar();renderHomeHero();toast(T().done||'تم تسجيل الدخول');
   }catch(e){toast(String(e.message||'تعذر تسجيل الدخول').slice(0,180),true);loadAtlasChallenge();}
   finally{atlasAuthBusy=false;const b=$('#fGo');if(b){b.disabled=!atlasChallenge;b.textContent=authMode==='reg'?AT().goRegister:AT().goLogin;}if(status)status.textContent='';}
@@ -6330,9 +7202,23 @@ saveHistory=function(){
   clearTimeout(atlasSaveTimer);renderSync('saving');
   atlasSaveTimer=setTimeout(async()=>{try{const sessions=packSessions(60000);const r=await api('/api/history/save',{method:'POST',body:JSON.stringify({sessions})});if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.detail||('HTTP '+r.status));}renderSync('saved');}catch(e){renderSync(e.message==='auth'?'local':'error');if(e.message!=='auth')toast(T().errNet||'فشل حفظ المحادثات',true);}},700);
 };
+let atlasKnownCloudMediaLoaded = false;
+const atlasKnownCloudMediaIds = new Set();
+const atlasMissingCloudMediaIds = new Set();
+
 loadHistory=async function(){
-  if(!S.token){let rows=lsGet('g3_guest_sessions',null);if(!Array.isArray(rows))rows=lsGet('g3_sessions',[]);S.sessions=Array.isArray(rows)?rows.slice(-40):[];renderSync('local');renderSessions();renderGallery();refreshStats();return;}
-  try{const j=await apiJ('/api/history');S.sessions=(Array.isArray(j.sessions)?j.sessions:[]).slice(-40);if(!Number.isInteger(S.cur)||S.cur < -1||S.cur >= S.sessions.length)S.cur=-1;renderSync('saved');renderSessions();renderGallery();refreshStats();}
+  if(!S.token){atlasKnownCloudMediaLoaded=false;atlasKnownCloudMediaIds.clear();let rows=lsGet('g3_guest_sessions',null);if(!Array.isArray(rows))rows=lsGet('g3_sessions',[]);S.sessions=Array.isArray(rows)?rows.slice(-40):[];renderSync('local');renderSessions();renderGallery();refreshStats();return;}
+  try{
+    const j=await apiJ('/api/history');
+    if(Array.isArray(j.media_ids)){
+      atlasKnownCloudMediaIds.clear();
+      for(const mid of j.media_ids){if(typeof mid==='string'&&mid)atlasKnownCloudMediaIds.add(mid);}
+      atlasKnownCloudMediaLoaded=true;
+    }
+    S.sessions=(Array.isArray(j.sessions)?j.sessions:[]).slice(-40);
+    if(!Number.isInteger(S.cur)||S.cur < -1||S.cur >= S.sessions.length)S.cur=-1;
+    renderSync('saved');renderSessions();renderGallery();refreshStats();
+  }
   catch(e){S.sessions=[];renderSessions();renderGallery();renderSync(e.message==='auth'?'local':'error');}
 };
 maybeAutoTitle=async function(index){
@@ -6363,13 +7249,1057 @@ function atlasPersonalizationPrompt(){
 const buildSystemBase=buildSystem;
 buildSystem=function(){return buildSystemBase()+'\n\n'+atlasPersonalizationPrompt();};
 
+/* =====================================================================
+   Encrypted HF Dataset Media Persistence (Images, Videos, Music, Files)
+   with Automatic 15-Day Non-Use Expiration & Activity Refresh
+   ===================================================================== */
+{
+  const syncedCloudMediaIds = new Set();
+  const pendingTouchIds = new Set();
+  const recentTouchAt = new Map();
+  let mediaTouchTimer = null;
+
+  function markAssetExpiredEverywhere(aid){
+    if (!aid) return;
+    let changed = false;
+    const scanMsgs = msgs => {
+      if (!Array.isArray(msgs)) return;
+      for (const m of msgs){
+        if (!m) continue;
+        if (Array.isArray(m.media)){
+          for (const x of m.media){
+            if (x && x.id === aid && !x.expired){ x.expired = true; changed = true; }
+          }
+        }
+        if (Array.isArray(m.atts)){
+          for (const a of m.atts){
+            if (a && a.id === aid && !a.expired){ a.expired = true; changed = true; }
+          }
+        }
+      }
+    };
+    scanMsgs(S.msgs);
+    for (const s of S.sessions || []) scanMsgs(s && s.msgs);
+    if (changed) saveHistory();
+  }
+
+  syncMediaBlobHook = async function(aid, blob, meta){
+    if (!S.token || !aid || !(blob instanceof Blob) || !blob.size || blob.size > 25165824) return null;
+    if (syncedCloudMediaIds.has(aid) || atlasKnownCloudMediaIds.has(aid)) return null;
+    meta = meta || {};
+    const qs = new URLSearchParams({
+      id: String(aid),
+      kind: String(meta.kind || 'file'),
+      name: String(meta.name || 'asset.bin').slice(0, 140),
+      mime: String(meta.mime || blob.type || 'application/octet-stream').slice(0, 120)
+    });
+    const headers = {'Content-Type': String(meta.mime || blob.type || 'application/octet-stream')};
+    const csrf = atlasCookie('genisi_csrf');
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+    try {
+      const r = await fetch('/api/media/upload?' + qs.toString(), {
+        method: 'POST',
+        headers: headers,
+        body: blob,
+        credentials: 'include',
+        cache: 'no-store'
+      });
+      if (r.ok){
+        syncedCloudMediaIds.add(aid);
+        atlasKnownCloudMediaIds.add(aid);
+        atlasMissingCloudMediaIds.delete(aid);
+        return await r.json().catch(() => null);
+      }
+    } catch(e){}
+    return null;
+  };
+
+  syncMediaUrlHook = async function(aid, url, meta){
+    if (!S.token || !aid || !/^https:\/\//i.test(String(url || ''))) return null;
+    if (syncedCloudMediaIds.has(aid) || atlasKnownCloudMediaIds.has(aid)) return null;
+    meta = meta || {};
+    try {
+      const res = await apiJ('/api/media/store-url', {
+        method: 'POST',
+        body: JSON.stringify({
+          url: String(url),
+          asset_id: String(aid),
+          kind: String(meta.kind || 'video'),
+          name: String(meta.name || 'media.mp4').slice(0, 140),
+          mime: String(meta.mime || '')
+        })
+      });
+      if (res && res.ok){
+        syncedCloudMediaIds.add(aid);
+        atlasKnownCloudMediaIds.add(aid);
+        atlasMissingCloudMediaIds.delete(aid);
+      }
+      return res;
+    } catch(e){ return null; }
+  };
+
+  touchMediaDbHook = function(aid){
+    if (!S.token || !aid) return;
+    if (atlasKnownCloudMediaLoaded && !atlasKnownCloudMediaIds.has(aid) && !syncedCloudMediaIds.has(aid)) return;
+    const now = Date.now(), last = recentTouchAt.get(aid) || 0;
+    if (now - last < 15 * 60 * 1000) return;
+    recentTouchAt.set(aid, now);
+    pendingTouchIds.add(String(aid));
+    clearTimeout(mediaTouchTimer);
+    mediaTouchTimer = setTimeout(async () => {
+      if (!S.token || !pendingTouchIds.size) return;
+      const ids = Array.from(pendingTouchIds).slice(0, 80);
+      pendingTouchIds.clear();
+      try { await api('/api/media/touch', {method: 'POST', body: JSON.stringify({ids: ids})}); } catch(e){}
+    }, 2200);
+  };
+
+  deleteMediaDbHook = async function(ids){
+    if (!S.token || !Array.isArray(ids) || !ids.length) return;
+    for (const id of ids){
+      syncedCloudMediaIds.delete(id);
+      atlasKnownCloudMediaIds.delete(id);
+      atlasMissingCloudMediaIds.add(id);
+    }
+    try { await api('/api/media/delete', {method: 'POST', body: JSON.stringify({ids: ids.slice(0, 200)})}); } catch(e){}
+  };
+
+  const inflightMediaFetches = new Map();
+  fetchMediaDbHook = async function(aid){
+    if (!aid || !S.token) return null;
+    if (atlasMissingCloudMediaIds.has(aid)) return null;
+    if (atlasKnownCloudMediaLoaded && !atlasKnownCloudMediaIds.has(aid) && !syncedCloudMediaIds.has(aid)){
+      atlasMissingCloudMediaIds.add(aid);
+      return null;
+    }
+    if (inflightMediaFetches.has(aid)) return inflightMediaFetches.get(aid);
+    const p = (async () => {
+      try {
+        const r = await fetch('/api/media/' + encodeURIComponent(String(aid)), {credentials: 'include', cache: 'no-store'});
+        if (r.status === 410){
+          atlasKnownCloudMediaIds.delete(aid);
+          atlasMissingCloudMediaIds.add(aid);
+          markAssetExpiredEverywhere(aid);
+          return {expired: true};
+        }
+        if (r.status === 404){
+          atlasKnownCloudMediaIds.delete(aid);
+          atlasMissingCloudMediaIds.add(aid);
+          return null;
+        }
+        if (!r.ok) return null;
+        const blob = await r.blob();
+        if (!blob || !blob.size) return null;
+        syncedCloudMediaIds.add(aid);
+        atlasKnownCloudMediaIds.add(aid);
+        return {blob: blob, mime: r.headers.get('content-type') || blob.type || 'application/octet-stream'};
+      } catch(e){ return null; }
+      finally { inflightMediaFetches.delete(aid); }
+    })();
+    inflightMediaFetches.set(aid, p);
+    return p;
+  };
+
+  window.syncPendingSessionMedia = async function(){
+    if (!S.token) return;
+    const seen = new Set();
+    for (const sess of S.sessions || []){
+      for (const m of (sess && sess.msgs) || []){
+        for (const a of (m && m.atts) || []){
+          if (a && a.id && !a.expired && !seen.has(a.id)){
+            seen.add(a.id);
+            const rec = await mediaGet(a.id);
+            if (rec && rec.blob) await syncMediaBlobHook(a.id, rec.blob, {kind: a.kind || 'file', name: a.name || '', mime: a.mime || rec.mime || ''});
+          }
+        }
+        for (const x of (m && m.media) || []){
+          if (x && x.id && !x.expired && !seen.has(x.id)){
+            seen.add(x.id);
+            const rec = await mediaGet(x.id);
+            if (rec && rec.blob) await syncMediaBlobHook(x.id, rec.blob, {kind: x.kind || 'file', name: x.name || x.title || '', mime: rec.mime || ''});
+            else if (x.url && /^https:\/\//i.test(x.url)) await syncMediaUrlHook(x.id, x.url, {kind: x.kind || 'video', name: x.name || x.title || ''});
+          }
+        }
+      }
+    }
+  };
+}
+function syncPendingSessionMedia(){ if (typeof window.syncPendingSessionMedia === 'function') return window.syncPendingSessionMedia(); }
+
+/* =====================================================================
+   Speaking Mode / Live Voice Call (#viewVoice) — Powered by openbmb/VoxCPM-Demo
+   Automatic Language Detection + Context-Aware Persona Voice Control
+   ===================================================================== */
+{
+  const voiceState = {
+    open: false,
+    mode: 'idle',        // 'idle' | 'listening' | 'thinking' | 'speaking'
+    handsFree: true,
+    startedAt: 0,
+    timerId: null,
+    rafId: 0,
+    turnCtl: null,
+    ttsCtl: null,
+    audioCtx: null,
+    micStream: null,
+    micAnalyser: null,
+    playAnalyser: null,
+    mediaRecorder: null,
+    recChunks: [],
+    recognition: null,
+    interimText: '',
+    finalSpeechText: '',
+    silenceTimer: null,
+    hadSpeech: false,
+    currentAudio: null,
+    personaVoice: '',
+    personaLang: '',
+    anchorFileData: null,
+    anchorBlob: null
+  };
+
+  const VOICE_CALL_PROMPT = [
+    'LIVE VOICE CALL MODE — SPEAKING DIRECTLY WITH THE USER',
+    'You are speaking aloud in a live real-time voice call on Genisi 4 Atlas.',
+    'MANDATORY VOICE CALL RULES:',
+    '1. Begin EVERY reply with a single metadata tag on the first line in this exact format:',
+    '<voice_meta>{"lang":"<bcp47_or_iso>","voice":"<concise English voice style instruction>"}</voice_meta>',
+    '2. Automatic Language Selection ("lang"): match the user’s exact spoken/written language and dialect (e.g. "ar" for Modern Standard Arabic, "ar-DZ" for Algerian Darja, "fr" for French, "en" for English, "es" for Spanish, etc.) unless the user explicitly asks you to speak another language.',
+    '3. Automatic Voice Persona Selection ("voice" — MUST be in English for the VoxCPM2 acoustic synth engine):',
+    '   - Choose the single most natural, fitting human voice description (gender, age, warmth, tone, pace, emotion) for the conversation.',
+    '   - Default signature voice if unspecified: "Warm, clear, articulate young adult voice, natural conversational rhythm, friendly and confident studio tone".',
+    '   - Adapt dynamically when appropriate: calm soothing voice for relaxation/bedtime stories, expressive dramatic storyteller for tales, crisp energetic tone for coaching/brainstorming, or any specific voice the user asks for (e.g. female/male, calm, cheerful, news anchor). Keep the same gender/timbre across turns unless the user asks to switch!',
+    '4. Spoken Prose Style (everything AFTER </voice_meta>):',
+    '   - Write ONLY natural, fluid words meant to be spoken aloud.',
+    '   - Keep replies concise and conversational (typically 1 to 4 sentences unless the user asks for a story or detailed explanation).',
+    '   - NO markdown formatting, NO bullet lists, NO asterisks, NO tables, NO code fences, NO raw URLs, and NO <thinking> blocks.',
+    '   - Write numbers and abbreviations in natural pronounceable words in the reply language.'
+  ].join('\n');
+
+  const chevSvg = '<svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+
+  function initVoiceCallDom(){
+    const plusBtn = $('#voicePlusBtn');
+    const modelBtn = $('#voiceModelBtn');
+    const micBtn = $('#voiceMicBtn');
+    const sendBtn = $('#voiceSendBtn');
+    const closeBtn = $('#voiceCloseBtn');
+    const hfBtn = $('#voiceHandsFreeBtn');
+    const vIn = $('#voiceInput');
+    const stageBox = $('#voiceStageBox');
+    if (!plusBtn || plusBtn._wired) return;
+    plusBtn._wired = true;
+
+    plusBtn.innerHTML = I.plus;
+    micBtn.innerHTML = I.mic;
+    sendBtn.innerHTML = I.up;
+    modelBtn.innerHTML = '<b>Genisi</b> <span>Auto</span> ' + chevSvg;
+
+    plusBtn.addEventListener('click', () => $('#fileIn').click());
+    modelBtn.addEventListener('click', e => openModelMenu(e.currentTarget));
+    closeBtn.addEventListener('click', () => closeVoiceCall(false));
+    hfBtn.addEventListener('click', () => {
+      voiceState.handsFree = !voiceState.handsFree;
+      syncVoiceUi();
+      toast(voiceState.handsFree ? T().voiceHandsFree + ' ✓' : T().voiceHandsFree + ' ✕');
+    });
+
+    vIn.addEventListener('input', () => {
+      syncWritingDirection(vIn.value);
+      refreshVoiceBar();
+    });
+    vIn.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey){
+        e.preventDefault();
+        submitVoiceTextTurn();
+      }
+    });
+    sendBtn.addEventListener('click', () => submitVoiceTextTurn());
+    micBtn.addEventListener('click', () => {
+      if (voiceState.mode === 'speaking' || voiceState.mode === 'thinking'){
+        interruptVoiceCall(voiceState.handsFree);
+        return;
+      }
+      if (voiceState.mode === 'listening') stopVoiceListening(true);
+      else startVoiceListening();
+    });
+    stageBox.addEventListener('click', () => {
+      if (voiceState.mode === 'speaking') interruptVoiceCall(voiceState.handsFree);
+      else if (voiceState.mode === 'idle') startVoiceListening();
+      else if (voiceState.mode === 'listening') stopVoiceListening(true);
+    });
+    stageBox.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        stageBox.click();
+      }
+    });
+    syncVoiceLangLabels();
+  }
+
+  function syncVoiceLangLabels(){
+    const t = T();
+    const liveBtn = $('#liveCallBtn');
+    if (liveBtn){ liveBtn.title = t.tVoiceCall; liveBtn.setAttribute('aria-label', t.tVoiceCall); }
+    const vIn = $('#voiceInput');
+    if (vIn) vIn.placeholder = t.askPh;
+    const plusBtn = $('#voicePlusBtn');
+    if (plusBtn){ plusBtn.title = t.attach; plusBtn.setAttribute('aria-label', t.attach); }
+    const hfBtn = $('#voiceHandsFreeBtn');
+    if (hfBtn) hfBtn.innerHTML = I.live + '<span>' + esc(t.voiceHandsFree) + '</span>';
+    const closeBtn = $('#voiceCloseBtn');
+    if (closeBtn) closeBtn.innerHTML = I.x + '<span>' + esc(t.voiceEnd) + '</span>';
+    const metaEl = $('#voiceAutoMeta');
+    if (metaEl && !voiceState.personaLang) metaEl.textContent = t.voiceAuto;
+    const micBtn = $('#voiceMicBtn');
+    if (micBtn){ micBtn.title = t.voiceListening; micBtn.setAttribute('aria-label', t.voiceListening); }
+    const sendBtn = $('#voiceSendBtn');
+    if (sendBtn){ sendBtn.title = t.send; sendBtn.setAttribute('aria-label', t.send); }
+    syncVoiceUi();
+  }
+
+  function refreshVoiceBar(){
+    const vIn = $('#voiceInput'), micBtn = $('#voiceMicBtn'), sendBtn = $('#voiceSendBtn');
+    if (!vIn || !micBtn || !sendBtn) return;
+    const hasTyped = !!(vIn.value.trim() || S.attachments.length);
+    if (hasTyped && voiceState.mode !== 'listening'){
+      sendBtn.style.display = '';
+      sendBtn.disabled = voiceState.mode === 'thinking';
+      micBtn.style.display = 'none';
+    } else {
+      sendBtn.style.display = 'none';
+      micBtn.style.display = '';
+      micBtn.classList.toggle('rec', voiceState.mode === 'listening');
+      micBtn.classList.toggle('stop', voiceState.mode === 'thinking' || voiceState.mode === 'speaking');
+      micBtn.innerHTML = (voiceState.mode === 'thinking' || voiceState.mode === 'speaking') ? I.stop : I.mic;
+    }
+  }
+
+  function setVoiceMode(mode, customStatus){
+    voiceState.mode = mode;
+    syncVoiceUi(customStatus);
+  }
+
+  function syncVoiceUi(customStatus){
+    const stage = $('#voiceStageBox');
+    const lbl = $('#voiceStateLabel');
+    const hfBtn = $('#voiceHandsFreeBtn');
+    const t = T();
+    if (hfBtn) hfBtn.classList.toggle('on', !!voiceState.handsFree);
+    if (stage){
+      stage.dataset.vstate = voiceState.mode;
+      if (voiceState.mode === 'idle' || voiceState.mode === 'thinking') stage.style.setProperty('--v-level', '1');
+    }
+    if (lbl){
+      lbl.textContent = customStatus || (
+        voiceState.mode === 'listening' ? t.voiceListening :
+        voiceState.mode === 'thinking' ? t.voiceThinking :
+        voiceState.mode === 'speaking' ? t.voiceSpeaking :
+        t.voiceReady
+      );
+    }
+    refreshVoiceBar();
+  }
+
+  function setVoiceCaption(text, isUserOrMuted){
+    const uEl = $('#voiceCapUser');
+    const aEl = $('#voiceCapAi');
+    const clean = String(text || '').trim();
+    if (isUserOrMuted){
+      if (uEl) uEl.textContent = clean;
+      if (aEl && voiceState.mode !== 'speaking') aEl.textContent = '';
+    } else {
+      if (aEl) aEl.textContent = clean;
+    }
+  }
+
+  function formatCallClock(sec){
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+  }
+
+  function detectSpokenLang(text, hint){
+    const h = String(hint || '').trim().toLowerCase();
+    if (/^(ar|fr|en|es|de|it|pt|ru|tr|zh|ja|ko)\b/.test(h)) return h;
+    const s = String(text || '');
+    if (/[\u0600-\u06FF]/.test(s)) return 'ar';
+    if (/[\u4E00-\u9FFF]/.test(s)) return 'zh';
+    if (/[\u3040-\u30FF]/.test(s)) return 'ja';
+    if (/[\uAC00-\uD7AF]/.test(s)) return 'ko';
+    if (/[\u0400-\u04FF]/.test(s)) return 'ru';
+    if (/\b(bonjour|merci|avec|pour|dans|est-ce|comment|vous|nous|très|bien)\b/i.test(s)) return 'fr';
+    if (/\b(hola|gracias|para|como|estás|buenos|por qué)\b/i.test(s)) return 'es';
+    if (/[a-zA-Z]/.test(s)) return S.lang === 'fr' ? 'fr' : 'en';
+    return S.lang === 'fr' ? 'fr' : S.lang === 'en' ? 'en' : 'ar';
+  }
+
+  function bcp47ForSpeech(langCode){
+    const base = String(langCode || '').toLowerCase();
+    if (base.startsWith('ar-')) return langCode;
+    if (base === 'ar') return 'ar-DZ';
+    if (base === 'fr') return 'fr-FR';
+    if (base === 'es') return 'es-ES';
+    if (base === 'de') return 'de-DE';
+    if (base === 'zh') return 'zh-CN';
+    if (base === 'ja') return 'ja-JP';
+    if (base === 'ko') return 'ko-KR';
+    if (base === 'ru') return 'ru-RU';
+    if (base === 'tr') return 'tr-TR';
+    return 'en-US';
+  }
+
+  function autoVoiceInstruction(spokenText, userText, metaVoice){
+    const mv = String(metaVoice || '').trim();
+    if (mv && mv.length >= 8) return mv.slice(0, 260);
+    const u = String(userText || '').toLowerCase();
+    if (/صوت\s*(?:أنث|انث|فتاة|امرأ|بنت)|female\s+voice|voix\s+f[ée]minine/i.test(u)){
+      return 'Warm, expressive young adult female voice, clear natural articulation, gentle conversational pace, studio quality';
+    }
+    if (/صوت\s*(?:رجل|رجولي|ذكر|عميق)|male\s+voice|deep\s+voice|voix\s+masculine/i.test(u)){
+      return 'Warm, confident young adult male voice, rich clear timbre, natural conversational rhythm, studio quality';
+    }
+    if (/قصة|حكاية|رواية|story|raconte/i.test(u)){
+      return 'Expressive, engaging storyteller voice, warm resonance, nuanced emotion and natural pauses, studio quality';
+    }
+    if (/هادئ|استرخاء|calm|soothing|doux/i.test(u)){
+      return 'Calm, soothing, gentle voice, relaxed warm tone, unhurried pace, clean intimate studio recording';
+    }
+    if (voiceState.personaVoice) return voiceState.personaVoice;
+    return 'Warm, natural, articulate young adult voice, friendly conversational rhythm, clear studio quality';
+  }
+
+  function extractVoiceMeta(raw){
+    let txt = String(raw || '');
+    txt = txt.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').replace(/<thinking>[\s\S]*$/i, '');
+    txt = txt.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<think>[\s\S]*$/i, '');
+    let lang = '', voice = '';
+    txt = txt.replace(/<voice_meta>\s*([\s\S]*?)\s*<\/voice_meta>/gi, (_, inner) => {
+      try {
+        const j = JSON.parse(inner.trim());
+        if (j && typeof j.lang === 'string') lang = j.lang.trim();
+        if (j && typeof j.voice === 'string') voice = j.voice.trim();
+      } catch(e){}
+      return '';
+    });
+    txt = txt.replace(/<voice_meta>[\s\S]*$/i, '');
+    txt = txt.replace(/```[\s\S]*?```/g, ' ').replace(/`([^`]+)`/g, '$1');
+    txt = txt.replace(/^\s*#{1,6}\s+/gm, '').replace(/\*\*([^*]+)\*\*/g, '$1').replace(/\*([^*]+)\*/g, '$1');
+    txt = txt.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '$1');
+    return {cleanText: txt.replace(/\s+/g, ' ').trim(), lang: lang, voice: voice};
+  }
+
+  function splitSpokenChunks(text){
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return [];
+    if (clean.length <= 320) return [clean];
+    const parts = clean.split(/(?<=[.!؟?\n؛;])\s+/u).map(s => s.trim()).filter(Boolean);
+    const chunks = [];
+    let cur = '';
+    for (const p of parts){
+      const limit = chunks.length === 0 ? 240 : 520;
+      if (cur && (cur.length + 1 + p.length) > limit){
+        chunks.push(cur);
+        cur = p;
+      } else {
+        cur = cur ? (cur + ' ' + p) : p;
+      }
+    }
+    if (cur) chunks.push(cur);
+    return chunks.slice(0, 6);
+  }
+
+  async function synthesizeVoxCPM(spokenText, controlInstruction, langCode, signal){
+    const text = String(spokenText || '').trim().slice(0, 1100);
+    if (!text) return null;
+    const hasNonEnZh = /[\u0600-\u06FF\u0400-\u04FF\u3040-\u30FF\uAC00-\uD7AFàâçéèêëîïôûùüÿñáíóúäöüß]/i.test(text);
+    const baseLang = String(langCode || '').toLowerCase();
+    const doNormalize = !hasNonEnZh && (baseLang.startsWith('en') || baseLang.startsWith('zh'));
+
+    // 1) Try same-origin FastAPI proxy (/api/voice/tts -> openbmb/VoxCPM-Demo)
+    if (!voiceState.anchorBlob){
+      try {
+        const res = await fetch('/api/voice/tts', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          credentials: 'same-origin',
+          signal: signal,
+          body: JSON.stringify({
+            text: text,
+            control_instruction: controlInstruction,
+            cfg_value: 2.0,
+            do_normalize: doNormalize
+          })
+        });
+        if (res.ok && /^audio\//i.test(res.headers.get('content-type') || '')){
+          const blob = await res.blob();
+          if (blob && blob.size > 200){
+            voiceState.anchorBlob = blob;
+            return blob;
+          }
+        }
+      } catch(e){
+        if (e && e.name === 'AbortError') throw e;
+      }
+    }
+
+    // 2) Direct browser Gradio fallback to https://openbmb-voxcpm-demo.hf.space
+    const meta = await ai.discoverGradio(VOXCPM_SPACE_URL, 'generate');
+    let refFile = voiceState.anchorFileData || null;
+    if (!refFile && voiceState.anchorBlob && typeof ai.uploadFilesToSpace === 'function'){
+      try {
+        const f = new File([voiceState.anchorBlob], 'voice-anchor.wav', {type: voiceState.anchorBlob.type || 'audio/wav'});
+        const up = await ai.uploadFilesToSpace(meta, {ref: f}, signal);
+        if (up && up.ref) { voiceState.anchorFileData = up.ref; refFile = up.ref; }
+      } catch(e){}
+    }
+    const callData = [
+      text,
+      refFile ? '' : String(controlInstruction || ''),
+      refFile,
+      false,
+      '',
+      2.0,
+      doNormalize,
+      false
+    ];
+    const callUrl = meta.space + meta.prefix + '/call/' + encodeURIComponent(meta.endpoint);
+    const r0 = await fetch(callUrl, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      credentials: 'omit',
+      signal: signal,
+      body: JSON.stringify({data: callData})
+    });
+    const j0 = await r0.json();
+    if (!r0.ok || !j0 || !j0.event_id) throw new Error('تعذّر الاتصال بمحرك الصوت VoxCPM');
+    const stream = await fetch(callUrl + '/' + encodeURIComponent(j0.event_id), {credentials: 'omit', signal: signal});
+    if (!stream.ok || !stream.body) throw new Error('انقطع بث محرك الصوت VoxCPM');
+    const reader = stream.body.getReader(), dec = new TextDecoder();
+    let buf = '', audioOutUrl = '', done = false;
+    const parseEvt = blk => {
+      let ev = '';
+      const ds = [];
+      for (const l of blk.replace(/\r/g, '').split('\n')){
+        if (l.startsWith('event:')) ev = l.slice(6).trim();
+        else if (l.startsWith('data:')) ds.push(l.slice(5).trim());
+      }
+      if (ev === 'error') throw new Error('خطأ في توليد الصوت عبر VoxCPM');
+      if (ev !== 'complete') return;
+      try {
+        const parsed = JSON.parse(ds.join('\n'));
+        const item = Array.isArray(parsed) ? parsed[0] : parsed;
+        if (typeof item === 'string') audioOutUrl = item;
+        else if (item && typeof item === 'object'){
+          if (item.url) audioOutUrl = item.url;
+          else if (item.path) audioOutUrl = meta.space + meta.prefix + '/file=' + item.path;
+        }
+      } catch(e){}
+      done = true;
+    };
+    while (!done){
+      const c = await reader.read();
+      if (c.done) break;
+      buf += dec.decode(c.value, {stream: true});
+      let ix;
+      while ((ix = buf.indexOf('\n\n')) >= 0){
+        const blk = buf.slice(0, ix); buf = buf.slice(ix + 2);
+        parseEvt(blk);
+      }
+    }
+    if (!done && buf.trim()) parseEvt(buf);
+    if (!audioOutUrl) throw new Error('لم يُرجع محرك VoxCPM مقطعاً صوتياً');
+    if (audioOutUrl.startsWith('/')) audioOutUrl = meta.space + audioOutUrl;
+    const ar = await fetch(audioOutUrl, {credentials: 'omit', signal: signal});
+    if (!ar.ok) throw new Error('تعذّر تحميل الصوت المولّد');
+    const blob = await ar.blob();
+    if (!voiceState.anchorBlob && blob && blob.size > 200) voiceState.anchorBlob = blob;
+    return blob;
+  }
+
+  function ensureAudioContext(){
+    if (!voiceState.audioCtx){
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) voiceState.audioCtx = new Ctx();
+    }
+    if (voiceState.audioCtx && voiceState.audioCtx.state === 'suspended'){
+      voiceState.audioCtx.resume().catch(() => {});
+    }
+    return voiceState.audioCtx;
+  }
+
+  function startVisualizerLoop(analyser){
+    cancelAnimationFrame(voiceState.rafId);
+    const stage = $('#voiceStageBox');
+    const bars = stage ? [...stage.querySelectorAll('.voice-bars i')] : [];
+    const data = analyser ? new Uint8Array(analyser.frequencyBinCount) : null;
+    const tick = ts => {
+      if (!voiceState.open || (voiceState.mode !== 'listening' && voiceState.mode !== 'speaking')){
+        if (stage) stage.style.setProperty('--v-level', '1');
+        bars.forEach(b => { b.style.height = '10px'; });
+        return;
+      }
+      let avg = 0;
+      if (analyser && data){
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        const n = Math.min(data.length, 48);
+        for (let i = 0; i < n; i++) sum += data[i];
+        avg = (sum / Math.max(1, n)) / 255;
+      }
+      if (avg < 0.02 && voiceState.mode === 'speaking'){
+        avg = 0.22 + 0.16 * Math.abs(Math.sin(ts / 150));
+      }
+      const level = Math.min(1, avg * 1.85);
+      if (stage) stage.style.setProperty('--v-level', (1 + level * 0.42).toFixed(3));
+      const weights = [0.62, 0.92, 1.18, 0.88, 0.65];
+      bars.forEach((b, idx) => {
+        const wave = 0.85 + 0.25 * Math.sin(ts / 120 + idx * 1.1);
+        const h = Math.round(9 + Math.min(24, level * 24 * weights[idx % weights.length] * wave));
+        b.style.height = h + 'px';
+      });
+      voiceState.rafId = requestAnimationFrame(tick);
+    };
+    voiceState.rafId = requestAnimationFrame(tick);
+  }
+
+  function playBlobSegment(blob, signal){
+    return new Promise((resolve, reject) => {
+      if (!blob || !blob.size){ resolve(); return; }
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+      voiceState.currentAudio = audio;
+      let analyser = null;
+      try {
+        const ctx = ensureAudioContext();
+        if (ctx){
+          analyser = ctx.createAnalyser();
+          analyser.fftSize = 128;
+          const src = ctx.createMediaElementSource(audio);
+          src.connect(analyser);
+          analyser.connect(ctx.destination);
+        }
+      } catch(e){ analyser = null; }
+      startVisualizerLoop(analyser);
+      const cleanup = () => {
+        if (voiceState.currentAudio === audio) voiceState.currentAudio = null;
+        URL.revokeObjectURL(url);
+      };
+      const onAbort = () => {
+        try { audio.pause(); } catch(e){}
+        cleanup();
+        reject(new DOMException('Interrupted', 'AbortError'));
+      };
+      if (signal){
+        if (signal.aborted){ onAbort(); return; }
+        signal.addEventListener('abort', onAbort, {once: true});
+      }
+      audio.onended = () => {
+        if (signal) signal.removeEventListener('abort', onAbort);
+        cleanup();
+        resolve();
+      };
+      audio.onerror = () => {
+        if (signal) signal.removeEventListener('abort', onAbort);
+        cleanup();
+        resolve();
+      };
+      audio.play().catch(err => {
+        if (signal) signal.removeEventListener('abort', onAbort);
+        cleanup();
+        reject(err);
+      });
+    });
+  }
+
+  function stopMicResources(){
+    clearTimeout(voiceState.silenceTimer);
+    voiceState.silenceTimer = null;
+    if (voiceState.recognition){
+      try { voiceState.recognition.onend = null; voiceState.recognition.stop(); } catch(e){}
+      voiceState.recognition = null;
+    }
+    if (voiceState.mediaRecorder && voiceState.mediaRecorder.state !== 'inactive'){
+      try { voiceState.mediaRecorder.stop(); } catch(e){}
+    }
+    voiceState.mediaRecorder = null;
+    if (voiceState.micStream){
+      try { voiceState.micStream.getTracks().forEach(t => t.stop()); } catch(e){}
+      voiceState.micStream = null;
+    }
+  }
+
+  function interruptVoiceCall(resumeListening){
+    if (voiceState.turnCtl){ try { voiceState.turnCtl.abort(); } catch(e){} voiceState.turnCtl = null; }
+    if (voiceState.ttsCtl){ try { voiceState.ttsCtl.abort(); } catch(e){} voiceState.ttsCtl = null; }
+    if (voiceState.currentAudio){ try { voiceState.currentAudio.pause(); } catch(e){} voiceState.currentAudio = null; }
+    stopMicResources();
+    setVoiceMode('idle');
+    if (resumeListening && voiceState.open) setTimeout(() => { if (voiceState.open && voiceState.mode === 'idle') startVoiceListening(); }, 180);
+  }
+
+  async function startVoiceListening(){
+    if (!voiceState.open || voiceState.mode === 'listening') return;
+    interruptVoiceCall(false);
+    ensureAudioContext();
+    voiceState.interimText = '';
+    voiceState.finalSpeechText = '';
+    voiceState.recChunks = [];
+    voiceState.hadSpeech = false;
+
+    let stream = null;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true}});
+    } catch(e){
+      toast(S.lang === 'ar' ? 'تعذّر الوصول إلى الميكروفون — يمكنك الكتابة في الشريط السفلي أو منح الإذن.' : 'Microphone permission denied — you can type below.', true);
+      setVoiceMode('idle');
+      return;
+    }
+    if (!voiceState.open){ stream.getTracks().forEach(t => t.stop()); return; }
+    voiceState.micStream = stream;
+    setVoiceMode('listening');
+    setVoiceCaption(T().voiceListening, true);
+
+    let analyser = null;
+    try {
+      const ctx = ensureAudioContext();
+      if (ctx){
+        analyser = ctx.createAnalyser();
+        analyser.fftSize = 128;
+        const src = ctx.createMediaStreamSource(stream);
+        src.connect(analyser);
+        voiceState.micAnalyser = analyser;
+      }
+    } catch(e){}
+    startVisualizerLoop(analyser);
+
+    // Record audio simultaneously so if SpeechRecognition isn't supported or returns empty, Qwen3.5-Omni receives native audio!
+    let recMime = 'audio/webm';
+    if (window.MediaRecorder){
+      for (const m of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']){
+        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)){ recMime = m; break; }
+      }
+      try {
+        const mr = new MediaRecorder(stream, {mimeType: recMime});
+        mr.ondataavailable = ev => { if (ev.data && ev.data.size > 0) voiceState.recChunks.push(ev.data); };
+        mr.start(250);
+        voiceState.mediaRecorder = mr;
+      } catch(e){}
+    }
+
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SR){
+      try {
+        const rec = new SR();
+        rec.lang = bcp47ForSpeech(voiceState.personaLang || S.lang);
+        rec.interimResults = true;
+        rec.continuous = true;
+        rec.onresult = ev => {
+          let interim = '', fin = '';
+          for (let i = 0; i < ev.results.length; i++){
+            const r = ev.results[i];
+            if (r.isFinal) fin += r[0].transcript + ' ';
+            else interim += r[0].transcript;
+          }
+          voiceState.finalSpeechText = fin.trim();
+          voiceState.interimText = interim.trim();
+          const combined = (voiceState.finalSpeechText + ' ' + voiceState.interimText).trim();
+          if (combined){
+            voiceState.hadSpeech = true;
+            setVoiceCaption(combined, false);
+            clearTimeout(voiceState.silenceTimer);
+            voiceState.silenceTimer = setTimeout(() => {
+              if (voiceState.mode === 'listening') stopVoiceListening(true);
+            }, 1500);
+          }
+        };
+        rec.onerror = () => {};
+        rec.onend = () => {
+          if (voiceState.mode === 'listening' && voiceState.hadSpeech){
+            stopVoiceListening(true);
+          }
+        };
+        rec.start();
+        voiceState.recognition = rec;
+      } catch(e){}
+    } else if (analyser){
+      // Acoustic VAD silence detector when browser lacks SpeechRecognition
+      const vadBuf = new Uint8Array(analyser.frequencyBinCount);
+      let silentSince = 0;
+      const checkVad = () => {
+        if (voiceState.mode !== 'listening' || !voiceState.micStream) return;
+        analyser.getByteFrequencyData(vadBuf);
+        let s = 0;
+        for (let i = 0; i < 32; i++) s += vadBuf[i];
+        const lv = (s / 32) / 255;
+        if (lv > 0.085){
+          voiceState.hadSpeech = true;
+          silentSince = 0;
+        } else if (voiceState.hadSpeech){
+          if (!silentSince) silentSince = Date.now();
+          else if (Date.now() - silentSince > 1550){
+            stopVoiceListening(true);
+            return;
+          }
+        }
+        setTimeout(checkVad, 120);
+      };
+      setTimeout(checkVad, 250);
+    }
+  }
+
+  async function stopVoiceListening(commitTurn){
+    if (voiceState.mode !== 'listening') return;
+    const mr = voiceState.mediaRecorder;
+    let audioBlob = null;
+    if (mr && mr.state !== 'inactive'){
+      audioBlob = await new Promise(res => {
+        mr.onstop = () => {
+          const b = voiceState.recChunks.length ? new Blob(voiceState.recChunks, {type: mr.mimeType || 'audio/webm'}) : null;
+          res(b);
+        };
+        try { mr.stop(); } catch(e){ res(null); }
+      });
+    }
+    const transcript = (voiceState.finalSpeechText + ' ' + voiceState.interimText).trim();
+    const hadVoice = voiceState.hadSpeech;
+    stopMicResources();
+    if (!commitTurn){
+      setVoiceMode('idle');
+      return;
+    }
+    if (!transcript && (!audioBlob || audioBlob.size < 1200 || !hadVoice)){
+      setVoiceMode('idle');
+      setVoiceCaption(T().voiceReady, true);
+      return;
+    }
+    await executeVoiceCallTurn(transcript, audioBlob);
+  }
+
+  async function submitVoiceTextTurn(){
+    const vIn = $('#voiceInput');
+    if (!vIn) return;
+    const text = vIn.value.trim();
+    if (!text && !S.attachments.length) return;
+    interruptVoiceCall(false);
+    vIn.value = '';
+    refreshVoiceBar();
+    await executeVoiceCallTurn(text, null);
+  }
+
+  function ensureActiveChatSession(seedTitle){
+    if (!Array.isArray(S.sessions)) S.sessions = [];
+    if (!Number.isInteger(S.cur) || S.cur < -1 || S.cur >= S.sessions.length) S.cur = -1;
+    if (S.cur === -1){
+      if (S.sessions.length >= 40){ const old = S.sessions.shift(); mediaDel(mediaIdsOf(old && old.msgs)); }
+      const sess = {title: String(seedTitle || T().tVoiceCall || 'Voice Call').slice(0, 60), msgs: S.msgs, ts: Date.now()};
+      S.sessions.push(sess);
+      S.cur = S.sessions.length - 1;
+    } else if (S.sessions[S.cur]){
+      S.sessions[S.cur].msgs = S.msgs;
+    }
+  }
+
+  async function executeVoiceCallTurn(userText, rawMicBlob){
+    if (!voiceState.open) return;
+    const ctl = new AbortController();
+    voiceState.turnCtl = ctl;
+    setVoiceMode('thinking');
+
+    const queuedAtts = S.attachments.splice(0, S.attachments.length);
+    renderAttach();
+    const displayUserText = userText || (S.lang === 'ar' ? '🎙️ رسالة صوتية' : S.lang === 'fr' ? '🎙️ Message vocal' : '🎙️ Voice message');
+    setVoiceCaption(displayUserText, true);
+
+    const um = {role: 'user', content: displayUserText};
+    if (queuedAtts.length){
+      um.atts = queuedAtts.map(a => ({
+        id: a.id, kind: a.kind, name: a.name, mime: a.mime, size: a.size,
+        url: a.url, dbUrl: a.dbUrl || (a.id ? '/api/media/' + a.id : ''), file: a.file
+      }));
+    }
+    addUserBubble(displayUserText, um.atts);
+    S.msgs.push(um);
+    ensureActiveChatSession(userText || T().tVoiceCall);
+
+    try {
+      const parsedAtts = queuedAtts.length ? await attsToFiles(queuedAtts) : {files: {}, docs: ''};
+      if (um.atts && parsedAtts.docs) um.docs = parsedAtts.docs;
+      let audioFile = parsedAtts.files.audio || null;
+      if (!userText && rawMicBlob && rawMicBlob.size > 800){
+        const ext = /mp4/i.test(rawMicBlob.type) ? 'm4a' : /ogg/i.test(rawMicBlob.type) ? 'ogg' : 'webm';
+        audioFile = new File([rawMicBlob], 'voice-input.' + ext, {type: rawMicBlob.type || 'audio/webm'});
+      }
+
+      const hist = S.msgs.slice(0, -1).slice(-18).map(m => ({
+        role: m.role,
+        content: String(m.content || '')
+      })).filter(m => m.content.trim());
+
+      const sys = buildSystem() + '\n\n' + VOICE_CALL_PROMPT;
+      const promptText = userText || 'Listen carefully to the user’s spoken audio message and reply naturally in the exact same language and dialect.';
+
+      const rawReply = await ai.voiceTurn({
+        text: promptText,
+        audio: audioFile,
+        image: parsedAtts.files.image || null,
+        video: parsedAtts.files.video || null,
+        docs: parsedAtts.docs || '',
+        history: hist,
+        system: sys,
+        signal: ctl.signal,
+        onDelta: partial => {
+          const {cleanText} = extractVoiceMeta(partial);
+          if (cleanText) setVoiceCaption(cleanText, false);
+        }
+      });
+
+      if (ctl.signal.aborted || !voiceState.open) return;
+      const {cleanText, lang, voice} = extractVoiceMeta(rawReply);
+      const finalSpoken = cleanText || (S.lang === 'ar' ? 'أنا أستمع إليك.' : 'I am listening.');
+      const chosenLang = detectSpokenLang(finalSpoken, lang || voiceState.personaLang);
+      const chosenVoice = autoVoiceInstruction(finalSpoken, userText, voice);
+      voiceState.personaLang = chosenLang;
+      voiceState.personaVoice = chosenVoice;
+
+      const metaBadge = $('#voiceAutoMeta');
+      if (metaBadge) metaBadge.textContent = T().voiceAuto + ' · ' + chosenLang.toUpperCase();
+      setVoiceCaption(finalSpoken, false);
+      setVoiceMode('thinking', T().voiceSynth);
+
+      // Append assistant message to conversation
+      const aiMsg = {role: 'assistant', content: finalSpoken, media: []};
+      S.msgs.push(aiMsg);
+      const b = addBubble('assistant', finalSpoken);
+      saveHistory(); renderSessions();
+
+      // Synthesize & stream chunks sequentially via openbmb/VoxCPM-Demo
+      // (VoxCPM enforces MAX_CONCURRENT_GENERATIONS_PER_SESSION=1, so chunk i+1 starts
+      //  synthesizing only AFTER chunk i finishes, pipelining behind audio playback.)
+      const ttsCtl = new AbortController();
+      voiceState.ttsCtl = ttsCtl;
+      const chunks = splitSpokenChunks(finalSpoken);
+      const synthPromises = new Array(chunks.length).fill(null);
+      if (chunks.length) synthPromises[0] = synthesizeVoxCPM(chunks[0], chosenVoice, chosenLang, ttsCtl.signal);
+
+      let firstVoiceBlob = null;
+      for (let i = 0; i < chunks.length; i++){
+        if (ttsCtl.signal.aborted || !voiceState.open) break;
+        if (!synthPromises[i]) synthPromises[i] = synthesizeVoxCPM(chunks[i], chosenVoice, chosenLang, ttsCtl.signal);
+        const blob = await synthPromises[i];
+        if (ttsCtl.signal.aborted || !voiceState.open) break;
+        if (i + 1 < chunks.length && !synthPromises[i + 1]){
+          synthPromises[i + 1] = synthesizeVoxCPM(chunks[i + 1], chosenVoice, chosenLang, ttsCtl.signal).catch(() => null);
+        }
+        if (blob && blob.size > 200){
+          if (!firstVoiceBlob) firstVoiceBlob = blob;
+          setVoiceMode('speaking');
+          await playBlobSegment(blob, ttsCtl.signal);
+        }
+      }
+
+      // Persist synthesized voice reply in conversation + encrypted HF Dataset DB (15-day TTL)
+      if (firstVoiceBlob){
+        const aid = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const vTitle = T().tVoiceCall + ' — Genisi';
+        mediaPut({id: aid, kind: 'audio', mime: firstVoiceBlob.type || 'audio/wav', blob: firstVoiceBlob, title: vTitle});
+        if (syncMediaBlobHook) syncMediaBlobHook(aid, firstVoiceBlob, {kind: 'audio', name: 'genisi-voice.wav', mime: firstVoiceBlob.type || 'audio/wav'});
+        aiMsg.media.push({id: aid, kind: 'audio', url: '/api/media/' + aid, title: vTitle});
+        if (b){
+          const mc = mediaCard(aiMsg.media[aiMsg.media.length - 1]);
+          if (mc) b.appendChild(mc);
+        }
+        saveHistory(); renderGallery();
+      }
+
+      if (voiceState.open && !ttsCtl.signal.aborted){
+        setVoiceMode('idle');
+        if (voiceState.handsFree){
+          setTimeout(() => {
+            if (voiceState.open && voiceState.mode === 'idle') startVoiceListening();
+          }, 320);
+        }
+      }
+    } catch(e){
+      if (e && e.name === 'AbortError') return;
+      setVoiceMode('idle');
+      const errMsg = (e && e.message) ? String(e.message).slice(0, 160) : T().errNet;
+      setVoiceCaption(errMsg, true);
+      toast(errMsg, true);
+    }
+  }
+
+  function openVoiceCall(){
+    initVoiceCallDom();
+    closePops();
+    ensureAudioContext();
+    voiceState.open = true;
+    voiceState.startedAt = Date.now();
+    clearInterval(voiceState.timerId);
+    const timerEl = $('#voiceTimer');
+    if (timerEl) timerEl.textContent = '00:00';
+    voiceState.timerId = setInterval(() => {
+      if (!voiceState.open) return;
+      const sec = Math.max(0, Math.floor((Date.now() - voiceState.startedAt) / 1000));
+      if (timerEl) timerEl.textContent = formatCallClock(sec);
+    }, 1000);
+
+    $('#viewHome').classList.remove('on');
+    $('#viewChat').classList.remove('on');
+    $('#viewVoice').classList.add('on');
+    document.body.classList.add('in-voice');
+    setVoiceMode('idle');
+    setVoiceCaption(T().voiceReady, true);
+    renderAttach();
+    refreshVoiceBar();
+  }
+
+  function closeVoiceCall(silent){
+    if (!voiceState.open) return;
+    voiceState.open = false;
+    clearInterval(voiceState.timerId);
+    voiceState.timerId = null;
+    cancelAnimationFrame(voiceState.rafId);
+    interruptVoiceCall(false);
+    $('#viewVoice').classList.remove('on');
+    document.body.classList.remove('in-voice');
+    if (!silent){
+      if (S.msgs && S.msgs.length){
+        $('#viewHome').classList.remove('on');
+        $('#viewChat').classList.add('on');
+        if (composerEl.parentNode !== $('#chatSlot')) placeComposer(true);
+        document.body.classList.add('in-chat');
+        scrollBottom();
+      } else {
+        $('#viewChat').classList.remove('on');
+        $('#viewHome').classList.add('on');
+        placeComposer(false);
+        document.body.classList.remove('in-chat');
+      }
+      renderAttach();
+    }
+  }
+
+  openVoiceCallHook = openVoiceCall;
+  closeVoiceCallHook = closeVoiceCall;
+  refreshVoiceBarHook = refreshVoiceBar;
+
+  const _applyLangVoiceBase = applyLang;
+  applyLang = function(){
+    _applyLangVoiceBase();
+    initVoiceCallDom();
+    syncVoiceLangLabels();
+  };
+  initVoiceCallDom();
+}
+
 // Load the signed HttpOnly session from the server; never restore a bearer token from localStorage.
 try{localStorage.removeItem('g3_token');localStorage.removeItem('g3_hf_token');localStorage.removeItem('g3_hf_repo');}catch(e){}
 setAuth(null,null);applyLang();renderSync('local');
 (async function bootSecureAccount(){
   try{
     const r=await fetch('/api/auth/me',{credentials:'include',cache:'no-store'});
-    if(r.ok){const j=await r.json();setAuth('cookie-session',j.user);await Promise.all([loadPreferences(),loadHistory(),loadWorkspace(),loadAgent()]);}
+    if(r.ok){const j=await r.json();setAuth('cookie-session',j.user);await Promise.all([loadPreferences(),loadHistory(),loadWorkspace(),loadAgent()]);syncPendingSessionMedia();}
     else{setAuth(null,null);await loadPreferences();await loadHistory();}
   }catch(e){setAuth(null,null);await loadPreferences();await loadHistory();renderSync('error');}
   renderAvatar();renderHomeHero();renderSessions();renderGallery();renderPlanBadge();
