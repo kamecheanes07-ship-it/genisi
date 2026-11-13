@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import hmac
+import html as html_mod
+import ipaddress
 import json
 import os
 import re
+import socket
 import time
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import urljoin
+from urllib.parse import unquote, urljoin, urlsplit
 
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -25,6 +30,7 @@ from .genisi_auth import (
     _rate_limit,
     _sha,
     _client_ip,
+    _validate_public_https_url,
     cleanup_all_expired_media,
     get_genisi_user_record,
     initialize_genisi_auth,
@@ -36,13 +42,27 @@ from .worker_client import worker as WORKER
 APP_NAME = "AnesNT Genisi"
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production").lower()
+QWEN_OMNI_SPACE_URL = os.getenv("QWEN_OMNI_SPACE_URL", "https://qwen-qwen3-5-omni-offline-demo.hf.space").rstrip("/")
 STEPAUDIO_MUSIC_SPACE_URL = os.getenv("STEPAUDIO_MUSIC_SPACE_URL", "https://stepfun-ai-stepaudio-3-music.hf.space").rstrip("/")
 VOXCPM_SPACE_URL = os.getenv("VOXCPM_SPACE_URL", "https://openbmb-voxcpm-demo.hf.space").rstrip("/")
+IMAGE_API_BASE_URL = os.getenv("IMAGE_API_BASE_URL", "https://prexzyapis.com").rstrip("/")
+VIDEO_API_URL = os.getenv("VIDEO_API_URL", "https://api.omegatech.app/api/ai/Txt2video").strip()
+_qwen_meta_cache: dict[str, Any] = {"ts": 0.0, "prefix": None, "endpoints": None}
 _music_schema_cache: dict[str, Any] = {"ts": 0.0, "submit_props": None}
 _voxcpm_meta_cache: dict[str, Any] = {"ts": 0.0, "prefix": None}
 _cleanup_task: asyncio.Task[Any] | None = None
 AGENT = Agent()
 app = FastAPI(title=APP_NAME, version="0.4.4-windows12-embedded-system-prompt", docs_url=None, redoc_url=None, openapi_url=None)
+_cors_origins_env = [o.strip() for o in os.getenv("CORS_ALLOW_ORIGINS", "").split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins_env,
+    allow_origin_regex=None if _cors_origins_env else os.getenv("CORS_ALLOW_ORIGIN_REGEX", r"^https?://.*"),
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+    expose_headers=["Content-Type", "Content-Disposition", "X-Image-Mime", "X-Public-Url"],
+)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 class HistoryItem(BaseModel):
@@ -464,8 +484,7 @@ def _strip_data_uri_prefix(raw: str) -> str:
 
 @app.post("/api/music/submit")
 async def music_submit(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Proxy music generation submissions to stepfun-ai/StepAudio-3-Music using its official step-music contract."""
-    _origin_guard(request)
+    """Direct Python gateway for stepfun-ai/StepAudio-3-Music using its official step-music contract."""
     _rate_limit("music-submit:" + _sha(_client_ip(request)), 20, 300)
     task = str(payload.get("task") or "text_to_music").strip().lower()
     if task not in {"text_to_music", "vocal_to_music", "music_cover"}:
@@ -540,7 +559,6 @@ async def music_submit(request: Request, payload: dict[str, Any] = Body(...)) ->
 @app.post("/api/music/query")
 async def music_query(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Poll music generation status from stepfun-ai/StepAudio-3-Music."""
-    _origin_guard(request)
     _rate_limit("music-query:" + _sha(_client_ip(request)), 180, 300)
     task_id = str(payload.get("task_id") or payload.get("id") or "").strip()[:160]
     if not task_id:
@@ -562,8 +580,7 @@ async def music_query(request: Request, payload: dict[str, Any] = Body(...)) -> 
 
 @app.post("/api/voice/tts")
 async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
-    """Server-side proxy for openbmb/VoxCPM-Demo Gradio speech generation."""
-    _origin_guard(request)
+    """Direct Python gateway for openbmb/VoxCPM-Demo Gradio speech synthesis."""
     _rate_limit("voice-tts:" + _sha(_client_ip(request)), 45, 300)
     text = str(payload.get("text") or "").strip()[:1200]
     if not text:
@@ -578,6 +595,8 @@ async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...))
     if re.search(r"[\u0600-\u06FF\u0400-\u04FF\u3040-\u30FF\uAC00-\uD7AF]", text):
         do_normalize = False
 
+    ref_b64 = _strip_data_uri_prefix(payload.get("reference_audio_base64") or "")
+
     try:
         async with httpx.AsyncClient(timeout=90.0, follow_redirects=True) as client:
             prefix = _voxcpm_meta_cache.get("prefix")
@@ -591,7 +610,34 @@ async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...))
                         _voxcpm_meta_cache["ts"] = time.time()
                         break
 
-            gradio_data = [text, control, None, False, "", cfg_value, do_normalize, False]
+            ref_file_data = None
+            if ref_b64 and len(ref_b64) < 8_000_000:
+                try:
+                    ref_bytes = base64.b64decode(ref_b64)
+                    up_res = await client.post(
+                        f"{VOXCPM_SPACE_URL}{prefix}/upload",
+                        files={"files": ("voice-anchor.wav", ref_bytes, "audio/wav")},
+                        timeout=25.0,
+                    )
+                    if up_res.status_code == 200:
+                        up_arr = up_res.json()
+                        if isinstance(up_arr, list) and up_arr:
+                            up_path = up_arr[0] if isinstance(up_arr[0], str) else (up_arr[0] or {}).get("path", "")
+                            if up_path:
+                                ref_file_data = {"path": up_path, "meta": {"_type": "gradio.FileData"}}
+                except Exception:
+                    ref_file_data = None
+
+            gradio_data = [
+                text,
+                "" if ref_file_data else control,
+                ref_file_data,
+                False,
+                "",
+                cfg_value,
+                do_normalize,
+                False,
+            ]
             r_call = await client.post(
                 f"{VOXCPM_SPACE_URL}{prefix}/call/generate",
                 json={"data": gradio_data},
@@ -638,6 +684,564 @@ async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...))
         raise
     except Exception as exc:
         raise HTTPException(502, f"تعذر توليد الصوت عبر VoxCPM: {str(exc)[:240]}") from exc
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Direct Python Model & Tool Gateways (Zero Third-Party Proxies, Native CORS)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_DEFAULT_OUTBOUND_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Accept": "*/*",
+}
+
+
+def _sniff_image_mime(raw: bytes) -> str:
+    if len(raw) > 3 and raw[:3] == b"\x89PN":
+        return "image/png"
+    if len(raw) > 2 and raw[:2] == b"\xff\xd8":
+        return "image/jpeg"
+    if len(raw) > 11 and raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return "image/webp"
+    if len(raw) > 3 and raw[:3] == b"GIF":
+        return "image/gif"
+    return ""
+
+
+async def _discover_qwen_gradio(client: httpx.AsyncClient, preferred_endpoint: str = "chat_predict") -> tuple[str, str, dict[str, Any]]:
+    now = time.time()
+    preferred = preferred_endpoint.strip().strip("/") or "chat_predict"
+    cached_prefix = _qwen_meta_cache.get("prefix")
+    cached_eps = _qwen_meta_cache.get("endpoints")
+    if (
+        cached_prefix is not None
+        and isinstance(cached_eps, dict)
+        and now - float(_qwen_meta_cache.get("ts") or 0) < 3600
+    ):
+        for k, val in cached_eps.items():
+            if k.strip("/") == preferred:
+                return str(cached_prefix), k.strip("/"), val if isinstance(val, dict) else {}
+
+    last_err = "unknown"
+    for cand in ("/gradio_api", ""):
+        try:
+            r = await client.get(f"{QWEN_OMNI_SPACE_URL}{cand}/info", timeout=15.0)
+            if r.status_code != 200:
+                last_err = f"HTTP {r.status_code}"
+                continue
+            info = r.json()
+            named = info.get("named_endpoints") or {}
+            if not isinstance(named, dict) or not named:
+                last_err = "missing named_endpoints"
+                continue
+            _qwen_meta_cache.update({"ts": now, "prefix": cand, "endpoints": named})
+            for k, val in named.items():
+                if k.strip("/") == preferred:
+                    return cand, k.strip("/"), val if isinstance(val, dict) else {}
+            first_key = next(iter(named.keys())).strip("/")
+            return cand, first_key, named.get(f"/{first_key}") or named.get(first_key) or {}
+        except Exception as exc:
+            last_err = str(exc)[:180]
+    raise HTTPException(502, f"تعذر الاتصال بمحرك Genisi 4 Atlas: {last_err}")
+
+
+def _extract_qwen_assistant_text(payload: Any) -> str | None:
+    arr = payload
+    if isinstance(arr, dict) and "data" in arr:
+        arr = arr["data"]
+    if isinstance(arr, str):
+        try:
+            arr = json.loads(arr)
+        except Exception:
+            return None
+    if not isinstance(arr, list) or len(arr) <= 4 or not isinstance(arr[4], list):
+        return None
+    history = arr[4]
+    last_user = -1
+    for idx in range(len(history) - 1, -1, -1):
+        item = history[idx]
+        if isinstance(item, dict) and item.get("role") == "user":
+            last_user = idx
+            break
+    for idx in range(len(history) - 1, last_user, -1):
+        item = history[idx]
+        if isinstance(item, dict) and item.get("role") == "assistant":
+            content = item.get("content")
+            if isinstance(content, str) and content != "":
+                return content
+    return None
+
+
+@app.get("/api/models/qwen/info")
+async def qwen_model_info(request: Request, endpoint: str = "chat_predict") -> dict[str, Any]:
+    """Check Qwen3.5-Omni health and return Gradio endpoint metadata via Python."""
+    _rate_limit("qwen-info:" + _sha(_client_ip(request)), 60, 300)
+    async with httpx.AsyncClient(timeout=18.0, follow_redirects=True) as client:
+        prefix, chosen, schema = await _discover_qwen_gradio(client, endpoint)
+        return {
+            "ok": True,
+            "space": QWEN_OMNI_SPACE_URL,
+            "prefix": prefix,
+            "endpoint": chosen,
+            "schema": schema,
+        }
+
+
+@app.post("/api/models/qwen/upload")
+async def qwen_model_upload(
+    request: Request,
+    name: str = "upload.bin",
+    mime: str = "application/octet-stream",
+) -> dict[str, Any]:
+    """Upload a multimodal attachment directly from Python to Qwen3.5-Omni (no browser CORS calls)."""
+    _rate_limit("qwen-upload:" + _sha(_client_ip(request)), 45, 300)
+    raw = await request.body()
+    if not raw:
+        raise HTTPException(400, "الملف المرفق فارغ")
+    if len(raw) > 25 * 1024 * 1024:
+        raise HTTPException(413, "حجم المرفق يتجاوز الحد المسموح (25MB)")
+    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(name or "upload.bin").name)[:96] or "upload.bin"
+    safe_mime = (mime or request.headers.get("content-type") or "application/octet-stream").split(";")[0].strip()[:120]
+
+    try:
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+            prefix, _, _ = await _discover_qwen_gradio(client)
+            up_res = await client.post(
+                f"{QWEN_OMNI_SPACE_URL}{prefix}/upload",
+                files={"files": (safe_name, raw, safe_mime)},
+            )
+            if up_res.status_code >= 400:
+                raise HTTPException(502, f"فشل رفع المرفق إلى المحرك ({up_res.status_code})")
+            arr = up_res.json()
+            if not isinstance(arr, list) or not arr:
+                raise HTTPException(502, "استجابة رفع غير متوقعة من المحرك")
+            remote_path = arr[0] if isinstance(arr[0], str) else str((arr[0] or {}).get("path") or "")
+            if not remote_path:
+                raise HTTPException(502, "لم يُرجع المحرك مسار المرفق")
+            public_url = f"{QWEN_OMNI_SPACE_URL}{prefix}/file={remote_path}"
+            return {
+                "ok": True,
+                "path": remote_path,
+                "url": public_url,
+                "file_data": {"path": remote_path, "meta": {"_type": "gradio.FileData"}},
+            }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر رفع المرفق عبر الخادم: {str(exc)[:220]}") from exc
+
+
+@app.post("/api/models/qwen/stream")
+async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...)) -> StreamingResponse:
+    """Stream Qwen3.5-Omni Gradio SSE directly through Python with native CORS headers."""
+    _rate_limit("qwen-stream:" + _sha(_client_ip(request)), 90, 300)
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
+    endpoint = str(payload.get("endpoint") or "chat_predict").strip().strip("/") or "chat_predict"
+
+    client = httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=15.0), follow_redirects=True)
+    try:
+        prefix, chosen, _ = await _discover_qwen_gradio(client, endpoint)
+        call_url = f"{QWEN_OMNI_SPACE_URL}{prefix}/call/{chosen}"
+        r_call = await client.post(call_url, json={"data": data}, timeout=35.0)
+        if r_call.status_code >= 400:
+            body_preview = r_call.text[:220]
+            await client.aclose()
+            raise HTTPException(502, f"رفض المحرك الطلب (HTTP {r_call.status_code}): {body_preview}")
+        started = r_call.json() if r_call.content else {}
+        event_id = started.get("event_id")
+        if not event_id:
+            await client.aclose()
+            raise HTTPException(502, "لم يُرجع المحرك معرّف بث صالحاً")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        await client.aclose()
+        raise HTTPException(502, f"تعذر بدء البث عبر الخادم: {str(exc)[:240]}") from exc
+
+    async def _sse_generator():
+        try:
+            async with client.stream("GET", f"{call_url}/{event_id}", timeout=180.0) as upstream:
+                if upstream.status_code >= 400:
+                    err_txt = (await upstream.aread()).decode("utf-8", errors="replace")[:200]
+                    yield f"event: error\ndata: {json.dumps({'message': f'HTTP {upstream.status_code}: {err_txt}'})}\n\n".encode("utf-8")
+                    return
+                async for chunk in upstream.aiter_bytes():
+                    if chunk:
+                        yield chunk
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            yield f"event: error\ndata: {json.dumps({'message': str(exc)[:220]})}\n\n".encode("utf-8")
+        finally:
+            await client.aclose()
+
+    return StreamingResponse(
+        _sse_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/models/qwen/once")
+async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Single-turn non-streaming Qwen3.5-Omni call via Python (used for prompt refinement & titles)."""
+    _rate_limit("qwen-once:" + _sha(_client_ip(request)), 90, 300)
+    data = payload.get("data")
+    if not isinstance(data, list):
+        raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
+    endpoint = str(payload.get("endpoint") or "chat_predict").strip().strip("/") or "chat_predict"
+
+    try:
+        async with httpx.AsyncClient(timeout=75.0, follow_redirects=True) as client:
+            prefix, chosen, _ = await _discover_qwen_gradio(client, endpoint)
+            call_url = f"{QWEN_OMNI_SPACE_URL}{prefix}/call/{chosen}"
+            r_call = await client.post(call_url, json={"data": data}, timeout=25.0)
+            started = r_call.json() if r_call.content else {}
+            event_id = started.get("event_id")
+            if r_call.status_code >= 400 or not event_id:
+                raise HTTPException(502, f"تعذر تشغيل المحرك ({r_call.status_code})")
+
+            latest = ""
+            cur_event = ""
+            async with client.stream("GET", f"{call_url}/{event_id}", timeout=65.0) as sse:
+                async for line in sse.aiter_lines():
+                    if line.startswith("event:"):
+                        cur_event = line[6:].strip()
+                    elif line.startswith("data:"):
+                        raw_data = line[5:].strip()
+                        if cur_event == "error":
+                            raise HTTPException(502, f"خطأ من المحرك: {raw_data[:200]}")
+                        if cur_event in {"generating", "complete"} and raw_data and raw_data != "null":
+                            try:
+                                extracted = _extract_qwen_assistant_text(json.loads(raw_data))
+                                if extracted is not None:
+                                    latest = extracted
+                            except Exception:
+                                pass
+                            if cur_event == "complete":
+                                break
+            return {"ok": True, "text": latest}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر إتمام الطلب عبر الخادم: {str(exc)[:220]}") from exc
+
+
+async def _decode_upstream_image_response(client: httpx.AsyncClient, r: httpx.Response) -> tuple[bytes, str]:
+    raw = r.content or b""
+    mime = _sniff_image_mime(raw)
+    ctype = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if not mime and r.status_code < 400 and ctype.startswith("image/"):
+        mime = ctype
+    if mime and r.status_code < 400 and len(raw) > 128:
+        return raw, mime
+
+    txt = raw[:300_000].decode("utf-8", errors="replace")
+    parsed: Any = None
+    try:
+        parsed = json.loads(txt)
+    except Exception:
+        parsed = None
+
+    if r.status_code >= 400 or (
+        isinstance(parsed, dict)
+        and (parsed.get("status") is False or (parsed.get("statusCode") and int(parsed["statusCode"]) != 200))
+    ):
+        msg = ""
+        if isinstance(parsed, dict):
+            msg = str(parsed.get("message") or parsed.get("error") or "")
+        raise HTTPException(502, (msg or f"Image service HTTP {r.status_code}")[:260])
+
+    # Handle JSON wrapping a data URI or HTTPS image URL
+    cand_str = ""
+    if isinstance(parsed, dict):
+        for k in ("image_url", "imageUrl", "image", "url", "output", "result", "link", "data"):
+            val = parsed.get(k)
+            if isinstance(val, str) and val.strip():
+                cand_str = val.strip()
+                break
+            if isinstance(val, list) and val and isinstance(val[0], str):
+                cand_str = val[0].strip()
+                break
+    if cand_str.startswith("data:image/") and "," in cand_str:
+        head, b64_part = cand_str.split(",", 1)
+        out_bytes = base64.b64decode(b64_part)
+        out_mime = _sniff_image_mime(out_bytes) or head[5:].split(";")[0] or "image/png"
+        return out_bytes, out_mime
+    if cand_str.startswith("https://"):
+        safe_u = _validate_public_https_url(cand_str)
+        r2 = await client.get(safe_u, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=60.0)
+        m2 = _sniff_image_mime(r2.content) or "image/png"
+        if r2.status_code < 400 and len(r2.content) > 128:
+            return r2.content, m2
+
+    raise HTTPException(502, "لم تُرجع خدمة الصور بيانات صورة صالحة")
+
+
+@app.post("/api/models/image/generate")
+async def model_image_generate(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
+    """Generate an image directly from Python without any third-party proxy."""
+    _rate_limit("img-gen:" + _sha(_client_ip(request)), 30, 300)
+    prompt = str(payload.get("prompt") or "").strip()[:1800]
+    if not prompt:
+        raise HTTPException(422, "وصف الصورة مطلوب")
+    model_id = str(payload.get("model") or "DALL-E").strip()[:60] or "DALL-E"
+
+    try:
+        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+            r = await client.get(
+                f"{IMAGE_API_BASE_URL}/ai/aiappgen",
+                params={"prompt": prompt, "modelId": model_id},
+                headers=_DEFAULT_OUTBOUND_HEADERS,
+            )
+            img_bytes, mime = await _decode_upstream_image_response(client, r)
+            return Response(
+                content=img_bytes,
+                media_type=mime,
+                headers={"Cache-Control": "no-store", "X-Image-Mime": mime},
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر توليد الصورة عبر الخادم: {str(exc)[:240]}") from exc
+
+
+@app.post("/api/models/image/edit")
+async def model_image_edit(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
+    """Edit an image directly from Python without any third-party proxy."""
+    _rate_limit("img-edit:" + _sha(_client_ip(request)), 25, 300)
+    prompt = str(payload.get("prompt") or "").strip()[:1200]
+    if not prompt:
+        raise HTTPException(422, "تعليمات تعديل الصورة مطلوبة")
+
+    image_url = str(payload.get("image_url") or "").strip()
+    image_b64 = _strip_data_uri_prefix(payload.get("image_base64") or "")
+    in_mime = str(payload.get("mime") or "image/png").split(";")[0].strip().lower()
+    if not in_mime.startswith("image/"):
+        in_mime = "image/png"
+
+    try:
+        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+            if image_url.startswith("https://"):
+                public_img_url = _validate_public_https_url(image_url)
+            elif image_b64:
+                raw_src = base64.b64decode(image_b64)
+                if len(raw_src) > 20 * 1024 * 1024:
+                    raise HTTPException(413, "حجم الصورة يتجاوز الحد المسموح")
+                ext = "jpg" if "jpeg" in in_mime or "jpg" in in_mime else "webp" if "webp" in in_mime else "png"
+                prefix, _, _ = await _discover_qwen_gradio(client)
+                up_res = await client.post(
+                    f"{QWEN_OMNI_SPACE_URL}{prefix}/upload",
+                    files={"files": (f"edit-src.{ext}", raw_src, in_mime)},
+                    timeout=45.0,
+                )
+                if up_res.status_code >= 400:
+                    raise HTTPException(502, "تعذر تجهيز الصورة المصدر للتعديل")
+                arr = up_res.json()
+                remote_path = arr[0] if isinstance(arr, list) and arr and isinstance(arr[0], str) else (arr[0] or {}).get("path", "") if isinstance(arr, list) and arr else ""
+                if not remote_path:
+                    raise HTTPException(502, "تعذر الحصول على رابط الصورة المصدر")
+                public_img_url = f"{QWEN_OMNI_SPACE_URL}{prefix}/file={remote_path}"
+            else:
+                raise HTTPException(422, "يرجى إرفاق صورة أو تمرير رابط صورة عام")
+
+            r = await client.get(
+                f"{IMAGE_API_BASE_URL}/ai/imageedit",
+                params={"prompt": prompt, "image": public_img_url},
+                headers=_DEFAULT_OUTBOUND_HEADERS,
+            )
+            img_bytes, mime = await _decode_upstream_image_response(client, r)
+            return Response(
+                content=img_bytes,
+                media_type=mime,
+                headers={"Cache-Control": "no-store", "X-Image-Mime": mime},
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر تعديل الصورة عبر الخادم: {str(exc)[:240]}") from exc
+
+
+@app.post("/api/models/video/submit")
+async def model_video_submit(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Submit a video generation request directly from Python (zero third-party proxy)."""
+    _rate_limit("vid-submit:" + _sha(_client_ip(request)), 15, 300)
+    prompt = str(payload.get("prompt") or "").strip()[:1200]
+    if not prompt:
+        raise HTTPException(422, "وصف الفيديو مطلوب")
+    ratio = str(payload.get("ratio") or "auto").strip()
+    if ratio not in {"auto", "1:1", "16:9", "9:16", "4:3", "3:4"}:
+        ratio = "auto"
+    sound = "false" if payload.get("sound") is False else "true"
+
+    try:
+        async with httpx.AsyncClient(timeout=240.0, follow_redirects=True) as client:
+            r = await client.get(
+                VIDEO_API_URL,
+                params={"action": "generate", "prompt": prompt, "ratio": ratio, "sound": sound},
+                headers=_DEFAULT_OUTBOUND_HEADERS,
+            )
+            text = r.text or ""
+            try:
+                data = r.json()
+            except Exception:
+                data = None
+            if r.status_code >= 400 or (
+                isinstance(data, dict)
+                and (data.get("status") is False or (data.get("statusCode") and int(data["statusCode"]) != 200))
+            ):
+                msg = str((data or {}).get("message") or (data or {}).get("error") or f"HTTP {r.status_code}")
+                raise HTTPException(502, msg[:260])
+            if isinstance(data, dict):
+                return data
+            m = re.search(r"https?://[^\s\"'<>]+", text)
+            if m:
+                return {"status": "succeeded", "video_url": m.group(0)}
+            raise HTTPException(502, f"رد غير متوقع من خدمة الفيديو: {text[:200]}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر بدء توليد الفيديو عبر الخادم: {str(exc)[:240]}") from exc
+
+
+@app.post("/api/models/video/status")
+async def model_video_status(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Poll video generation task status directly from Python (zero third-party proxy)."""
+    _rate_limit("vid-status:" + _sha(_client_ip(request)), 180, 300)
+    task_id = str(payload.get("task_id") or payload.get("id") or "").strip()[:160]
+    if not task_id:
+        raise HTTPException(422, "معرّف مهمة الفيديو مطلوب")
+    try:
+        async with httpx.AsyncClient(timeout=35.0, follow_redirects=True) as client:
+            r = await client.get(
+                VIDEO_API_URL,
+                params={"action": "status", "task_id": task_id, "id": task_id},
+                headers=_DEFAULT_OUTBOUND_HEADERS,
+            )
+            try:
+                data = r.json()
+            except Exception:
+                data = {"raw": (r.text or "")[:300]}
+            if r.status_code >= 400:
+                msg = str((data or {}).get("message") or (data or {}).get("error") or f"HTTP {r.status_code}")
+                raise HTTPException(502, msg[:240])
+            return data if isinstance(data, dict) else {"data": data}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر الاستعلام عن حالة الفيديو: {str(exc)[:240]}") from exc
+
+
+def _validate_public_http_or_https_url(raw_url: str) -> str:
+    parsed = urlsplit(raw_url.strip())
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
+        raise HTTPException(400, "يُسمح فقط بروابط HTTP/HTTPS العامة")
+    host = parsed.hostname.strip().lower()
+    if host in {"localhost", "127.0.0.1", "::1"} or host.endswith((".local", ".internal")):
+        raise HTTPException(400, "عنوان المصدر غير مسموح")
+    default_port = 443 if parsed.scheme == "https" else 80
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or default_port, type=socket.SOCK_STREAM)
+    except OSError as exc:
+        raise HTTPException(400, "تعذر التحقق من نطاق الرابط") from exc
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved or ip.is_unspecified:
+            raise HTTPException(400, "عنوان الشبكة الداخلية غير مسموح")
+    return raw_url.strip()
+
+
+def _html_to_clean_text(raw_html: str) -> str:
+    cleaned = re.sub(r"<(script|style|noscript|svg|iframe)\b[^>]*>[\s\S]*?</\1>", " ", raw_html, flags=re.I)
+    cleaned = re.sub(r"<br\s*/?>|</p>|</div>|</li>|</h[1-6]>|</tr>", "\n", cleaned, flags=re.I)
+    cleaned = re.sub(r"<[^>]+>", " ", cleaned)
+    cleaned = html_mod.unescape(cleaned)
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def _parse_ddg_html(raw_html: str) -> list[dict[str, str]]:
+    results: list[dict[str, str]] = []
+    seen: set[str] = set()
+    link_re = re.compile(r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)</a>', re.I)
+    snip_re = re.compile(r'class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)</(?:a|div|span)>', re.I)
+    links = link_re.findall(raw_html)
+    snips = [ _html_to_clean_text(s) for s in snip_re.findall(raw_html) ]
+    for idx, (href, raw_title) in enumerate(links):
+        url = html_mod.unescape(href).strip()
+        if "uddg=" in url:
+            m_u = re.search(r"[?&]uddg=([^&]+)", url)
+            if m_u:
+                url = unquote(m_u.group(1))
+        if not url.startswith(("http://", "https://")) or url in seen:
+            continue
+        seen.add(url)
+        title = _html_to_clean_text(raw_title)
+        snippet = snips[idx] if idx < len(snips) else ""
+        if title:
+            results.append({"title": title[:200], "url": url[:500], "snippet": snippet[:360]})
+        if len(results) >= 8:
+            break
+    return results
+
+
+@app.post("/api/tools/web-search")
+async def tool_web_search_python(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Run web search directly from Python without browser CORS proxies."""
+    _rate_limit("web-search:" + _sha(_client_ip(request)), 45, 300)
+    query = str(payload.get("query") or "").strip()[:400]
+    if not query:
+        raise HTTPException(422, "عبارة البحث مطلوبة")
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+            r = await client.get(
+                "https://html.duckduckgo.com/html/",
+                params={"q": query},
+                headers=_DEFAULT_OUTBOUND_HEADERS,
+            )
+            if r.status_code >= 400:
+                raise HTTPException(502, f"خدمة البحث أعادت HTTP {r.status_code}")
+            results = _parse_ddg_html(r.text or "")
+            return {"ok": True, "query": query, "results": results}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر تنفيذ البحث عبر الخادم: {str(exc)[:220]}") from exc
+
+
+@app.post("/api/tools/read-url")
+async def tool_read_url_python(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
+    """Fetch and extract readable text from a public URL directly via Python (SSRF-protected, zero proxies)."""
+    _rate_limit("read-url:" + _sha(_client_ip(request)), 45, 300)
+    raw_url = str(payload.get("url") or "").strip()[:1000]
+    safe_url = _validate_public_http_or_https_url(raw_url)
+    try:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
+            cur_url = safe_url
+            r: httpx.Response | None = None
+            for _ in range(4):
+                r = await client.get(cur_url, headers=_DEFAULT_OUTBOUND_HEADERS)
+                if r.status_code in {301, 302, 303, 307, 308} and r.headers.get("location"):
+                    nxt = urljoin(cur_url, r.headers["location"])
+                    cur_url = _validate_public_http_or_https_url(nxt)
+                    continue
+                break
+            if r is None or r.status_code >= 400:
+                raise HTTPException(502, f"فشل قراءة الرابط (HTTP {r.status_code if r else 502})")
+            raw_text = (r.content or b"")[:512_000].decode("utf-8", errors="replace")
+            ctype = (r.headers.get("content-type") or "").lower()
+            if "html" in ctype or raw_text.lstrip().startswith("<"):
+                raw_text = _html_to_clean_text(raw_text)
+            if len(raw_text) > 8000:
+                raw_text = raw_text[:8000] + " ...[مقتطع]"
+            return {"ok": True, "url": cur_url, "text": raw_text}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر جلب الصفحة عبر الخادم: {str(exc)[:220]}") from exc
 
 
 # The secure router owns registration, login, logout, preferences, history and account health.

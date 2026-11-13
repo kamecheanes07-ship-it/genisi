@@ -433,11 +433,187 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
         self.assertRegex(html, r"\.voice-pill-bar\s*\{[^}]*width:\s*min\(100%,\s*660px\)[^}]*height:\s*64px[^}]*border-radius:\s*999px")
         self.assertRegex(html, r"\.composer\s*\{[^}]*border-radius:\s*var\(--r-lg\)")
 
-        # 3) StepAudio-3-Music & VoxCPM-Demo endpoints wired
-        self.assertIn("https://stepfun-ai-stepaudio-3-music.hf.space", html)
-        self.assertIn("https://openbmb-voxcpm-demo.hf.space", html)
+        # 3) StepAudio-3-Music & VoxCPM-Demo & Qwen/Image/Video wired strictly via Python /api/* (zero browser proxies)
+        self.assertIn("/api/music/submit", html)
+        self.assertIn("/api/music/query", html)
+        self.assertIn("/api/voice/tts", html)
+        self.assertIn("/api/models/qwen/stream", html)
+        self.assertIn("/api/models/image/generate", html)
+        self.assertIn("/api/models/image/edit", html)
+        self.assertIn("/api/models/video/submit", html)
         self.assertIn("music_gen", html)
         self.assertIn("liveCallBtn", html)
+
+    def test_zero_proxies_mobile_responsiveness_and_speaking_mode_addbubble_fix(self) -> None:
+        html = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
+
+        # 1) Zero external proxies anywhere in static/index.html (especially AnesKAM's proxy)
+        for banned in (
+            "aneskam",
+            "allorigins",
+            "codetabs",
+            "thingproxy",
+            "r.jina.ai",
+            "viaProxy",
+            "VIDEO_PROXY",
+            "fetchCors",
+            "hf.space",
+        ):
+            self.assertNotIn(banned.lower(), html.lower(), f"Banned proxy/direct-space reference remained: {banned}")
+
+        # 2) Speaking Mode addBubble ReferenceError fixed (uses addAiStatic + global addBubble fallback)
+        self.assertIn("function addBubble(role, text, media)", html)
+        self.assertIn("const b = addAiStatic(finalSpoken, [], false);", html)
+        self.assertNotIn("addBubble('assistant'", html)
+
+        # 3) Universal phone screen compatibility (320px -> 760px, safe areas, 100dvh, landscape, 16px mobile inputs)
+        self.assertIn("100dvh", html)
+        self.assertIn("env(safe-area-inset-top", html)
+        self.assertIn("env(safe-area-inset-bottom", html)
+        self.assertIn("@media (max-width:430px)", html)
+        self.assertIn("@media (max-width:360px)", html)
+        self.assertIn("@media (max-height:560px)", html)
+        self.assertIn("font-size:16px !important", html)
+
+    def test_python_model_gateways_and_cors_headers(self) -> None:
+        fake_png = b"\x89PNG\r\n\x1a\nfakepngbytes" * 80
+
+        class _FakeModelsAsyncClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def aclose(self):
+                return None
+
+            async def get(self, url, **kwargs):
+                params = kwargs.get("params") or {}
+                if url.endswith("/info"):
+                    return httpx.Response(200, json={"named_endpoints": {"/chat_predict": {"parameters": []}}})
+                if "/ai/aiappgen" in url or "/ai/nano-banana" in url:
+                    return httpx.Response(200, content=fake_png, headers={"content-type": "image/png"})
+                if params.get("action") == "generate":
+                    return httpx.Response(200, json={"task_id": "vid-task-1", "status": "PROCESSING"})
+                if params.get("action") == "status":
+                    return httpx.Response(200, json={"status": "SUCCEEDED", "video_url": "https://cdn.example.com/out.mp4"})
+                if "html.duckduckgo.com" in url:
+                    return httpx.Response(
+                        200,
+                        text='<a class="result__a" href="https://example.com/doc">Example Doc</a><a class="result__snippet">Snippet body</a>',
+                        headers={"content-type": "text/html"},
+                    )
+                return httpx.Response(404, text="not found")
+
+            async def post(self, url, **kwargs):
+                if "/call/chat_predict" in url:
+                    return httpx.Response(200, json={"event_id": "evt-qwen-1"})
+                return httpx.Response(404, text="not found")
+
+            def stream(self, method, url, **kwargs):
+                class _FakeStream:
+                    status_code = 200
+
+                    async def __aenter__(self_inner):
+                        return self_inner
+
+                    async def __aexit__(self_inner, exc_type, exc, tb):
+                        return False
+
+                    async def aiter_lines(self_inner):
+                        yield "event: complete"
+                        yield 'data: [null, null, null, null, [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "مرحباً من بايثون مباشرة"}]]'
+                        yield ""
+
+                    async def aiter_bytes(self_inner):
+                        yield (
+                            b"event: complete\n"
+                            b'data: [null, null, null, null, [{"role": "assistant", "content": "streamed via python"}]]\n\n'
+                        )
+
+                return _FakeStream()
+
+        cross_origin_headers = {
+            "Origin": "https://mobile-client.example.org",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        }
+        with patch("app.main.httpx.AsyncClient", _FakeModelsAsyncClient):
+            # 1) Preflight OPTIONS returns CORS headers
+            opt = self.client.options("/api/models/qwen/once", headers=cross_origin_headers)
+            self.assertEqual(opt.status_code, 200)
+            self.assertEqual(
+                opt.headers.get("access-control-allow-origin"),
+                "https://mobile-client.example.org",
+            )
+
+            # 2) Cross-origin POST on Qwen once works without 403 CSRF block and carries CORS header
+            r_once = self.client.post(
+                "/api/models/qwen/once",
+                headers={"Origin": "https://mobile-client.example.org"},
+                json={"data": ["hello", None, None, None, [], "sys", 0.4, 0.8, 20], "endpoint": "chat_predict"},
+            )
+            self.assertEqual(r_once.status_code, 200, r_once.text)
+            self.assertEqual(r_once.json()["text"], "مرحباً من بايثون مباشرة")
+            self.assertEqual(
+                r_once.headers.get("access-control-allow-origin"),
+                "https://mobile-client.example.org",
+            )
+
+            # 3) Qwen SSE stream via Python
+            r_stream = self.client.post(
+                "/api/models/qwen/stream",
+                headers={"Origin": "https://mobile-client.example.org"},
+                json={"data": ["hi", None, None, None, [], "sys", 0.4, 0.8, 20], "endpoint": "chat_predict"},
+            )
+            self.assertEqual(r_stream.status_code, 200)
+            self.assertIn("streamed via python", r_stream.text)
+
+            # 4) Image generate & edit via Python
+            r_img = self.client.post(
+                "/api/models/image/generate",
+                headers={"Origin": "https://mobile-client.example.org"},
+                json={"prompt": "minimalist oasis at dusk", "width": 1024, "height": 1024, "seed": 42},
+            )
+            self.assertEqual(r_img.status_code, 200)
+            self.assertEqual(r_img.content, fake_png)
+
+            # 5) Video submit & status via Python (zero AnesKAM proxy)
+            r_vid_sub = self.client.post(
+                "/api/models/video/submit",
+                headers={"Origin": "https://mobile-client.example.org"},
+                json={"prompt": "ocean waves", "resolution": "720P", "duration": 5, "enable_audio": True},
+            )
+            self.assertEqual(r_vid_sub.status_code, 200)
+            self.assertEqual(r_vid_sub.json()["task_id"], "vid-task-1")
+
+            r_vid_st = self.client.post(
+                "/api/models/video/status",
+                headers={"Origin": "https://mobile-client.example.org"},
+                json={"task_id": "vid-task-1"},
+            )
+            self.assertEqual(r_vid_st.status_code, 200)
+            self.assertEqual(r_vid_st.json()["status"], "SUCCEEDED")
+
+            # 6) Web search & SSRF-guarded read-url via Python
+            r_ws = self.client.post(
+                "/api/tools/web-search",
+                headers={"Origin": "https://mobile-client.example.org"},
+                json={"query": "Genisi Atlas", "count": 3},
+            )
+            self.assertEqual(r_ws.status_code, 200)
+            self.assertTrue(r_ws.json()["results"])
+
+            r_ssrf = self.client.post(
+                "/api/tools/read-url",
+                headers={"Origin": "https://mobile-client.example.org"},
+                json={"url": "https://127.0.0.1/admin"},
+            )
+            self.assertEqual(r_ssrf.status_code, 400)
 
 
 if __name__ == "__main__":

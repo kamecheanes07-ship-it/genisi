@@ -1189,6 +1189,204 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
 #atlasSet input[type=range]{padding:4px 0}
 #atlasSet .field label b{font-weight:500;color:var(--text)}
 .chart{width:100%;max-width:640px;background:#0b1120;border:1px solid var(--border);border-radius:10px;margin-top:8px}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Universal Phone & Small-Screen Compatibility (320px → 760px, iOS/Android,
+   Safe-Area Notches, Dynamic Viewport 100dvh, Landscape Phones, Touch UX)
+   ═══════════════════════════════════════════════════════════════════════════ */
+html, body{
+  width:100%;
+  max-width:100vw;
+  overflow-x:hidden;
+  height:100%;
+  height:100dvh;
+}
+.view{
+  height:100%;
+  height:100dvh;
+  max-width:100vw;
+  overflow-x:hidden;
+}
+/* Speaking mode always clears the fixed #topbar and safe-area insets on every screen */
+.voice-shell{
+  padding-top:calc(62px + env(safe-area-inset-top, 0px));
+  padding-bottom:calc(16px + env(safe-area-inset-bottom, 0px));
+  padding-left:max(14px, env(safe-area-inset-left, 0px));
+  padding-right:max(14px, env(safe-area-inset-right, 0px));
+}
+.body table{
+  display:block;
+  max-width:100%;
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.pop{
+  max-width:calc(100vw - 20px);
+}
+@media (hover:none){
+  .mactions{opacity:.85}
+}
+@media (max-width:760px){
+  #topbar{
+    top:0;
+    height:calc(52px + env(safe-area-inset-top, 0px));
+    padding-top:env(safe-area-inset-top, 0px);
+    padding-left:max(12px, env(safe-area-inset-left, 0px));
+    padding-right:max(12px, env(safe-area-inset-right, 0px));
+  }
+  #sidebar{
+    width:min(300px, 86vw);
+    padding-top:calc(18px + env(safe-area-inset-top, 0px));
+    padding-bottom:calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+  #drawer{
+    padding-top:env(safe-area-inset-top, 0px);
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+  }
+  #threadWrap{
+    padding-top:calc(54px + env(safe-area-inset-top, 0px));
+    -webkit-overflow-scrolling:touch;
+  }
+  #thread{
+    padding:14px max(12px, env(safe-area-inset-left, 0px)) 20px max(12px, env(safe-area-inset-right, 0px));
+    gap:18px;
+  }
+  #hello{
+    padding-top:calc(58px + env(safe-area-inset-top, 0px));
+  }
+  .composer{
+    padding:6px max(10px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(10px, env(safe-area-inset-left, 0px));
+  }
+  /* Prevent iOS Safari auto-zoom on input focus across all controls */
+  #input, .voice-pill-input, .field input, .field select, #atlasSet textarea, .sphead input, .atlas-pref-field textarea, .atlas-pref-field select{
+    font-size:16px !important;
+  }
+  .crow2{
+    flex-wrap:nowrap;
+    gap:3px;
+    min-width:0;
+  }
+  #modelBtn{
+    max-width:132px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+    flex-shrink:1;
+  }
+  /* Mobile bottom-sheet modals for effortless one-hand reach */
+  .overlay{
+    padding:10px;
+    align-items:flex-end;
+  }
+  .modal{
+    width:100%;
+    max-width:100%;
+    max-height:calc(90dvh - env(safe-area-inset-top, 0px));
+    border-radius:24px 24px 18px 18px;
+    padding:20px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+  .spanel{
+    width:calc(100vw - 16px);
+    max-height:calc(84dvh - env(safe-area-inset-top, 0px));
+    border-radius:22px;
+  }
+  #toasts{
+    bottom:calc(18px + env(safe-area-inset-bottom, 0px));
+    width:calc(100vw - 24px);
+  }
+  /* Speaking Mode (#viewVoice) mobile tuning */
+  .voice-shell{
+    padding-top:calc(56px + env(safe-area-inset-top, 0px));
+    padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px));
+    gap:10px;
+  }
+  .voice-top{
+    gap:6px;
+  }
+  .voice-badge{
+    padding:5px 10px;
+    font-size:11.6px;
+    max-width:100%;
+  }
+  .voice-chip-btn{
+    height:34px;
+    padding:0 11px;
+    font-size:11.8px;
+  }
+  .voice-stage-box{
+    width:min(72vw, 280px);
+    max-height:min(38dvh, 276px);
+    border-radius:24px;
+    gap:14px;
+  }
+  .voice-captions{
+    min-height:44px;
+    max-height:92px;
+    padding:2px 6px;
+  }
+  .voice-cap-ai{
+    font-size:14.2px;
+    line-height:1.55;
+  }
+  .voice-pill-bar{
+    width:100%;
+    height:56px;
+    min-height:56px;
+    max-height:56px;
+    padding:0 8px;
+    gap:5px;
+  }
+  .voice-pill-bar .vp-btn{
+    width:38px;
+    height:38px;
+  }
+  .waitcard.img-square{
+    width:min(100%, 332px);
+    border-radius:24px;
+  }
+}
+/* Compact & small phones (320px → 430px: iPhone SE/Mini, Galaxy S, Pixel, Fold outer screen) */
+@media (max-width:430px){
+  #headline{font-size:22px; margin-bottom:18px}
+  html[lang="ar"] #headline{font-size:20.5px; line-height:1.45}
+  #sugList{gap:8px; margin-top:14px}
+  #sugList .sug{padding:9px 14px; font-size:13.2px; max-width:100%}
+  .cbtn{width:35px; height:35px}
+  #sendBtn{width:36px; height:36px}
+  #toolsBtn{padding:0 9px; height:34px; font-size:12.2px; gap:5px}
+  #toolsBtn span{display:none}
+  #modelBtn{height:33px; padding:0 9px; font-size:12px; max-width:116px}
+  .voice-pill-model{padding:0 7px; font-size:12px}
+  .voice-chip-btn span{max-width:96px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .setRow{flex-wrap:wrap; gap:8px}
+  .filerow{padding:12px 13px; gap:10px}
+}
+/* Ultra-small phones (≤ 360px, e.g. 320px width) */
+@media (max-width:360px){
+  #brand span{display:none !important}
+  #modelBtn{max-width:94px; padding:0 7px; font-size:11.4px}
+  .cbtn{width:33px; height:33px}
+  #sendBtn{width:34px; height:34px}
+  .voice-pill-model{display:none}
+  .voice-pill-bar{height:52px; min-height:52px; max-height:52px; padding:0 6px; gap:3px}
+  .voice-pill-bar .vp-btn{width:35px; height:35px}
+  .voice-stage-box{width:min(68vw, 224px); max-height:min(34dvh, 220px)}
+  .voice-orb-wrap{width:92px; height:92px}
+  .voice-orb-core{width:68px; height:68px}
+}
+/* Landscape phone viewport (short height) */
+@media (max-height:560px) and (max-width:920px){
+  #hello{padding-top:calc(46px + env(safe-area-inset-top, 0px))}
+  #headline{font-size:20px; margin-bottom:10px}
+  #sugList{flex-direction:row; flex-wrap:wrap; gap:6px; margin-top:8px}
+  #input{min-height:36px; max-height:84px}
+  .voice-shell{gap:6px; padding-top:calc(48px + env(safe-area-inset-top, 0px))}
+  .voice-stage-box{width:min(32dvh, 168px); max-height:32dvh; border-radius:20px; gap:8px}
+  .voice-orb-wrap{width:76px; height:76px}
+  .voice-orb-core{width:58px; height:58px}
+  .voice-captions{min-height:32px; max-height:56px}
+  .voice-pill-bar{height:48px; min-height:48px; max-height:48px}
+}
 </style>
 </head>
 <body>
@@ -2968,6 +3166,9 @@ function addAiStatic(text, media, canRegen){
   $('#thread').appendChild(d);
   return d;
 }
+function addBubble(role, text, media){
+  return role === 'user' ? addUserBubble(text, media) : addAiStatic(text, media || [], false);
+}
 function attachActions(msgEl, canRegen){
   const row = document.createElement('div'); row.className = 'mactions';
   const mk = (ic, tip, fn, cls) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'cbtn' + (cls ? ' ' + cls : ''); b.innerHTML = ic; b.title = tip; b.setAttribute('aria-label', tip); b.onclick = fn; row.appendChild(b); };
@@ -4140,14 +4341,11 @@ document.addEventListener('keydown', e => {
 <script>
 (function(){
 'use strict';
-const DEFAULT_PROXY = "https://r.jina.ai/";
 const MAX_TOOL_TURNS = 8;
-/* v58.64: محرك واحد (مساحة Qwen). حُذف عنوان مساحة البرمجة وإعداداتها (max tokens / generation mode).
-   القيم الافتراضية للتوليد هي قيم المساحة نفسها (0.7 / 0.8 / 20)؛ الملامح الدقيقة تضبط حرارتها في الموجّه. */
-try { ['g3_space', 'g3_maxTokens', 'g3_generationMode'].forEach(k => localStorage.removeItem(k)); } catch(e){}
+/* v58.64+: كل النماذج والأدوات تعمل مباشرةً عبر خادم البايثون المحلي (/api/...) بدون أي بروكسيات خارجية */
+try { ['g3_space', 'g3_maxTokens', 'g3_generationMode', 'g3_proxy', 'g3_cors'].forEach(k => localStorage.removeItem(k)); } catch(e){}
 try { if (localStorage.getItem('g3_topP') === '0.9' && localStorage.getItem('g3_topK') === '100'){ localStorage.setItem('g3_topP', '0.8'); localStorage.setItem('g3_topK', '20'); } } catch(e){}
 const state = {
-  proxy: localStorage.getItem('g3_proxy') || DEFAULT_PROXY,
   system: localStorage.getItem('g3_system') || '',
   toolsOn: localStorage.getItem('g3_tools') !== '0',
   temp: +(localStorage.getItem('g3_temp') || 0.7),
@@ -4165,7 +4363,6 @@ const toolCtx = { body: null };
 const KIND_TOKEN = { audio: "[Audio]", image: "[Image]", video: "[Video]" };
 function saveState(){
   try {
-    localStorage.setItem('g3_proxy', state.proxy);
     localStorage.setItem('g3_system', state.system); localStorage.setItem('g3_tools', state.toolsOn ? '1' : '0');
     localStorage.setItem('g3_temp', String(state.temp)); localStorage.setItem('g3_topP', String(state.topP)); localStorage.setItem('g3_topK', String(state.topK));
   } catch(e){}
@@ -4283,41 +4480,30 @@ async function toolWeather(args){
 async function toolReadUrl(args){
   const url = String(args.url || "").trim();
   if (!/^https?:\/\//i.test(url)) throw new Error("URL يجب أن يبدأ بـ http(s)");
-  let txt = "";
-  try {
-    const r = await fetchTimeout(url, null, 12000);
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    txt = await r.text();
-  } catch(e){
-    const proxy = (state.proxy || "").replace(/\/+$/, "") + "/" + url;
-    const r = await fetchTimeout(proxy, null, 25000);
-    if (!r.ok) throw new Error("فشل الجلب (HTTP " + r.status + ")");
-    txt = await r.text();
-  }
-  if (/^</.test(txt.trim())) txt = stripTags(txt);
-  if (txt.length > 8000) txt = txt.slice(0, 8000) + " ...[مقتطع]";
-  return "محتوى " + url + "\n" + txt;
+  const r = await fetchTimeout("/api/tools/read-url", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    credentials: "same-origin",
+    body: JSON.stringify({url: url})
+  }, 25000);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || ("فشل الجلب (HTTP " + r.status + ")"));
+  return "محتوى " + (j.url || url) + "\n" + String(j.text || "");
 }
 async function toolWebSearch(args){
   const q = String(args.query || "").trim();
   if (!q) throw new Error("query مطلوب");
-  const target = "https://html.duckduckgo.com/html/?q=" + encodeURIComponent(q);
-  const attempts = [
-    {label: "direct", url: target},
-    {label: "proxy", url: (state.proxy || "").replace(/\/+$/, "") + "/" + target},
-    {label: "allorigins", url: "https://api.allorigins.win/raw?url=" + encodeURIComponent(target)}
-  ];
-  for (const a of attempts){
-    try {
-      const r = await fetchTimeout(a.url, null, 20000);
-      if (!r.ok) continue;
-      const txt = await r.text();
-      if (!txt) continue;
-      const results = parseDdgHtml(txt);
-      if (results.length) return fmtSearchResults(q, "DuckDuckGo — " + a.label, results);
-    } catch(e){}
-  }
-  throw new Error("تعذر البحث. جرّب Proxy في الإعدادات");
+  const r = await fetchTimeout("/api/tools/web-search", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    credentials: "same-origin",
+    body: JSON.stringify({query: q})
+  }, 25000);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || ("فشل البحث (HTTP " + r.status + ")"));
+  const results = Array.isArray(j.results) ? j.results : [];
+  if (!results.length) throw new Error("لم يُعثر على نتائج مطابقة");
+  return fmtSearchResults(q, "DuckDuckGo", results);
 }
 async function toolImageSearch(args){
   const q = String(args.query || '').trim();
@@ -4577,18 +4763,13 @@ renderSync = function(){
 };
 async function detect(show){
   conn = 'checking'; renderSync();
-  await new Promise(r => setTimeout(r, 0));   // بعد أن تحفظ بقية مستمعي «حفظ الإعدادات» قيمها
-  /* v58.64: مساحة واحدة تُفحص (Qwen)، بمهلة 12 ثانية. */
-  const space = String(state.qwenOmniSpace || '').replace(/\/+$/, "");
+  await new Promise(r => setTimeout(r, 0));
   let up = false;
-  for (const prefix of ["/gradio_api", ""]){
-    if (!space || up) break;
-    const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 12000);
-    try {
-      const res = await fetch(space + prefix + "/info", {credentials: "omit", signal: ac.signal});
-      if (res.ok){ await res.json(); up = true; }
-    } catch(e){} finally { clearTimeout(tm); }
-  }
+  const ac = new AbortController(), tm = setTimeout(() => ac.abort(), 14000);
+  try {
+    const res = await fetch('/api/models/qwen/info', {credentials: 'same-origin', signal: ac.signal});
+    if (res.ok){ const j = await res.json(); up = Boolean(j && j.ok); }
+  } catch(e){} finally { clearTimeout(tm); }
   conn = up ? 'ok' : 'down';
   renderSync();
   if (show) toast((CT[S.lang] || CT.ar)[conn], conn === 'down');
@@ -4840,7 +5021,6 @@ $('#toolsBtn').onclick = e => {
 /* ===== Atlas settings block inside the existing settings modal ===== */
 const blk = document.createElement('div'); blk.id = 'atlasSet';
 blk.innerHTML =
-  '<div class="field"><label>Proxy لقراءة صفحات الويب</label><input id="qProxy" dir="ltr" spellcheck="false"></div>' +
   '<div class="field"><label>System Prompt مخصص</label><textarea id="qSys" rows="3"></textarea></div>' +
   '<div class="field"><label>Temperature: <b id="qTv"></b></label><input id="qTemp" type="range" min="0.1" max="2" step="0.1" style="width:100%"></div>' +
   '<div class="field"><label>Top P: <b id="qPv"></b></label><input id="qTopP" type="range" min="0.05" max="1" step="0.05" style="width:100%"></div>' +
@@ -4858,7 +5038,7 @@ function syncQSet(){
   document.querySelectorAll('#qToolsSeg button').forEach(b => b.classList.toggle('on', (b.dataset.v === '1') === state.toolsOn));
 }
 function fillQSet(){
-  $('#qProxy').value = state.proxy; $('#qSys').value = state.system;
+  $('#qSys').value = state.system;
   $('#qTemp').value = state.temp; $('#qTv').textContent = state.temp;
   $('#qTopP').value = state.topP; $('#qPv').textContent = state.topP;
   $('#qTopK').value = state.topK; $('#qKv').textContent = state.topK;
@@ -4866,7 +5046,6 @@ function fillQSet(){
 }
 new MutationObserver(() => { if ($('#settingsOverlay').classList.contains('on')) fillQSet(); }).observe($('#settingsOverlay'), {attributes: true, attributeFilter: ['class']});
 $('#setClose').addEventListener('click', () => {
-  state.proxy = $('#qProxy').value.trim() || DEFAULT_PROXY;
   state.system = $('#qSys').value;
   state.temp = clampNum(+$('#qTemp').value || 0.7, 0.1, 2); state.topP = clampNum(+$('#qTopP').value || 0.8, 0.05, 1); state.topK = Math.round(clampNum(+$('#qTopK').value || 20, 1, 100));
   saveState(); detect(true);
@@ -5009,36 +5188,9 @@ function lib(k){
   }));
 }
 
-/* ================= media tools (image_gen / image_edit / video_gen / music_gen) ================= */
-const STEPAUDIO_SPACE_URL = 'https://stepfun-ai-stepaudio-3-music.hf.space';
-const VOXCPM_SPACE_URL = 'https://openbmb-voxcpm-demo.hf.space';
+/* ================= media tools (image_gen / image_edit / video_gen / music_gen — all via Python /api/...) ================= */
 const MEDIA_KIND = {image_gen: 'image', image_edit: 'image', video_gen: 'video', music_gen: 'audio'};
 let lastGenerated = '', lastAttachedFile = null, lastGeneratedBlob = null;
-async function fetchCors(url, ms){
-  const custom = (localStorage.getItem('g3_cors') || '').trim();
-  const routes = [u => u];
-  if (custom) routes.push(u => custom + (/[=\/]$/.test(custom) ? '' : '/') + (/\?/.test(custom) ? encodeURIComponent(u) : u));
-  routes.push(u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u),
-              u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
-              u => 'https://thingproxy.freeboard.io/fetch/' + u);
-  let lastErr = null;
-  for (let k = 0; k < routes.length; k++){
-    try {
-      const r = await fetchTimeout(routes[k](url), null, ms || 150000);
-      const txt = await r.text();
-      if (!r.ok){
-        let msg = ''; try { const j = JSON.parse(txt); msg = j.message || j.error || ''; } catch(e){}
-        const er = new Error(msg || ('HTTP ' + r.status)); er.http = r.status; throw er;
-      }
-      if (k > 0 && !/^\s*[\[{]/.test(txt) && !/https?:\/\//.test(txt)) throw new Error('رد غير متوقع من الوسيط');
-      return txt;
-    } catch(e){
-      if (k === 0 && e && e.http && e.http < 500 && e.http !== 403 && e.http !== 429) throw e;   // genuine API error
-      lastErr = e;
-    }
-  }
-  throw new Error('تعذّر الوصول إلى خدمة التوليد من المتصفح (غالباً CORS). ' + ((lastErr && lastErr.message) || '') + ' — يمكنك وضع وسيط CORS خاص بك في الإعدادات.');
-}
 function findMediaUrl(o, kind, depth){
   depth = depth || 0;
   if (o == null || depth > 5) return '';
@@ -5046,7 +5198,6 @@ function findMediaUrl(o, kind, depth){
     const v = o.trim();
     if (/^https?:\/\//i.test(v)) return v;
     if (/^\/\/[\w.-]+\.[a-z]{2,}\//i.test(v)) return 'https:' + v;
-    if (kind === 'audio' && /^\/(v1|outputs|files|audio|gradio_api)\//i.test(v)) return STEPAUDIO_SPACE_URL + v;
     if (kind === 'audio' && /^data:audio\/[a-z0-9+.-]+;base64,/i.test(v)) return v;
     if (kind === 'audio' && v.length > 600 && /^[A-Za-z0-9+\/=\s]+$/.test(v)){
       const cleanB64 = v.replace(/\s+/g, '');
@@ -5076,13 +5227,11 @@ function resolveImageArg(v){
   const s = String(v || '').trim();
   if (/^https?:\/\//i.test(s)) return s;
   if (/^last$/i.test(s) && lastGenerated) return lastGenerated;
-  if (/^(blob:|data:image)/i.test(s)) return s;
+  if (/^(blob:|data:image|\/api\/media\/)/i.test(s)) return s;
   const r = lastGenerated;
   if (r) return r;
   throw new Error('لا توجد صورة للتعديل: أرفق صورة أو أعطِ رابطاً عاماً (https).');
 }
-const VIDEO_PROXY = 'https://aneskam-gen.hf.space/proxy?url=';
-const viaProxy = u => VIDEO_PROXY + encodeURIComponent(u);
 function sniffImage(u8){
   if (u8.length > 3 && u8[0] === 0x89 && u8[1] === 0x50 && u8[2] === 0x4E) return 'image/png';
   if (u8.length > 2 && u8[0] === 0xFF && u8[1] === 0xD8) return 'image/jpeg';
@@ -5090,21 +5239,21 @@ function sniffImage(u8){
   if (u8.length > 3 && u8[0] === 0x47 && u8[1] === 0x49 && u8[2] === 0x46) return 'image/gif';
   return '';
 }
-/* الصور: الرد بايتات خام (بدون رابط) → Blob → رابط محلي blob: للعرض/التنزيل. بدون أي بروكسي. */
-async function imageRequest(url, opts){
-  const r = await fetchTimeout(url, opts, 180000);
+/* الصور: طلب POST مباشر إلى بايثون (/api/models/image/...) → Blob محلي، بدون أي بروكسي خارجي */
+async function pythonImageRequest(endpoint, bodyObj){
+  const r = await fetchTimeout(endpoint, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    credentials: 'same-origin',
+    body: JSON.stringify(bodyObj || {})
+  }, 185000);
   const buf = await r.arrayBuffer(), u8 = new Uint8Array(buf);
   let mime = sniffImage(u8);
   if (!mime && r.ok && /^image\//i.test(r.headers.get('content-type') || '')) mime = r.headers.get('content-type').split(';')[0];
   if (mime && r.ok){ const bl = new Blob([buf], {type: mime}); lastGeneratedBlob = bl; return {url: URL.createObjectURL(bl), blob: bl}; }
-  let txt = ''; try { txt = new TextDecoder().decode(u8.subarray(0, 300000)); } catch(e){}
+  let txt = ''; try { txt = new TextDecoder().decode(u8.subarray(0, 120000)); } catch(e){}
   let j = null; try { j = JSON.parse(txt); } catch(e){}
-  if (!r.ok || (j && (j.status === false || (j.statusCode && Number(j.statusCode) !== 200))))
-    throw new Error((j && (j.message || j.error)) || ('HTTP ' + r.status));
-  const out = j ? findMediaUrl(j, 'image') : '';        /* احتياط: لو رجع JSON فيه base64 */
-  if (out && /^data:image\//i.test(out)){ const bl = await (await fetch(out)).blob(); lastGeneratedBlob = bl; return {url: URL.createObjectURL(bl), blob: bl}; }
-  if (out) return {url: out};
-  throw new Error('لم تُرجع الخدمة صورة صالحة.');
+  throw new Error((j && (j.detail || j.message || j.error)) || ('HTTP ' + r.status));
 }
 /* ---- مُحسِّن البرومت: يكتب برومت إنجليزي دقيق جداً قبل إرساله لنموذج التوليد ---- */
 const REFINE_SYS = {
@@ -5193,43 +5342,21 @@ function formatStepAudioErr(obj, status){
   return 'StepAudio HTTP ' + (status || 'error');
 }
 async function postStepAudioJson(relPath, payload, timeoutMs){
-  const bodyStr = JSON.stringify(payload || {});
   const proxyMap = {'/v1/audio/music/submit': '/api/music/submit', '/v1/audio/music/query': '/api/music/query'};
-  const localEndpoint = location.protocol !== 'file:' ? proxyMap[relPath] : null;
-  if (localEndpoint){
-    let proxyErr = null;
-    try {
-      const hdrs = {'Content-Type': 'application/json'};
-      const csrfPart = document.cookie.split('; ').find(x => x.startsWith('genisi_csrf='));
-      if (csrfPart) hdrs['X-CSRF-Token'] = decodeURIComponent(csrfPart.slice('genisi_csrf='.length));
-      const lr = await fetchTimeout(localEndpoint, {
-        method: 'POST',
-        headers: hdrs,
-        body: bodyStr,
-        credentials: 'same-origin'
-      }, timeoutMs || 240000);
-      const ltxt = await lr.text();
-      let lj = null; try { lj = JSON.parse(ltxt); } catch(e){}
-      if (lr.ok && lj) return lj;
-      if (lr.status >= 400 && lr.status < 500 && lr.status !== 404){
-        proxyErr = new Error(formatStepAudioErr(lj, lr.status));
-      }
-    } catch(e){
-      if (e && e.name === 'AbortError') throw e;
-    }
-    if (proxyErr) throw proxyErr;
-  }
-  const direct = await fetchTimeout(STEPAUDIO_SPACE_URL + relPath, {
+  const endpoint = proxyMap[relPath] || relPath;
+  const hdrs = {'Content-Type': 'application/json'};
+  const csrfPart = document.cookie.split('; ').find(x => x.startsWith('genisi_csrf='));
+  if (csrfPart) hdrs['X-CSRF-Token'] = decodeURIComponent(csrfPart.slice('genisi_csrf='.length));
+  const lr = await fetchTimeout(endpoint, {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: bodyStr
+    headers: hdrs,
+    body: JSON.stringify(payload || {}),
+    credentials: 'same-origin'
   }, timeoutMs || 240000);
-  const dtxt = await direct.text();
-  let dj = null; try { dj = JSON.parse(dtxt); } catch(e){}
-  if (!direct.ok){
-    throw new Error(formatStepAudioErr(dj, direct.status));
-  }
-  return dj || {};
+  const ltxt = await lr.text();
+  let lj = null; try { lj = JSON.parse(ltxt); } catch(e){}
+  if (!lr.ok) throw new Error(formatStepAudioErr(lj, lr.status));
+  return lj || {};
 }
 function blobToBase64Raw(blob){
   return new Promise((res, rej) => {
@@ -5360,39 +5487,46 @@ async function runMedia(name, args, phase){
   phase(1);
   prompt = (await refineMediaPrompt(name, prompt, args)).slice(0, name === 'video_gen' ? 1100 : name === 'image_edit' ? 900 : 1800);
   try { console.log('[media prompt]', name, prompt); } catch(e){}
-  /* ---- توليد صورة: GET مباشر ---- */
+  /* ---- توليد صورة عبر خادم البايثون مباشرة ---- */
   if (name === 'image_gen'){
-    const r = await imageRequest('https://prexzyapis.com/ai/aiappgen?prompt=' + enc(prompt) + '&modelId=' + enc(String(args.model || 'DALL-E')), {method: 'GET'});
+    const r = await pythonImageRequest('/api/models/image/generate', {
+      prompt: prompt,
+      model: String(args.model || 'DALL-E')
+    });
     phase(3); return {url: r.url, blob: r.blob, special: 'image', request_id: '', prompt};
   }
-  /* ---- تعديل صورة: GET لو الصورة رابط https عام، وإلا POST برفع الملف ---- */
+  /* ---- تعديل صورة عبر خادم البايثون مباشرة (بدون أي بروكسي) ---- */
   if (name === 'image_edit'){
     let {file, link, img} = pickEditSource(args);
     if (!file && !link){
       const ref = resolveImageArg(img);
-      if (/^https:\/\//i.test(ref)) link = ref; else file = await (await fetch(ref)).blob();
+      if (/^https:\/\//i.test(ref)) link = ref;
+      else file = await (await fetch(ref, {credentials: 'same-origin'})).blob();
     }
-    if (!link && file){   /* صورة محلية/ناتجة → تُرفع إلى مساحة المحادثة لتصبح رابط https عاماً، ثم GET */
-      link = await ai.uploadPublic(file, 'edit-src.' + (((file.type || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg')));
-      if (!link) throw new Error('تعذّر تجهيز الصورة للتعديل.');
+    const editPayload = {prompt: prompt};
+    if (link && /^https:\/\//i.test(link)){
+      editPayload.image_url = link;
+    } else if (file){
+      editPayload.image_base64 = await blobToBase64Raw(file);
+      editPayload.mime = file.type || 'image/png';
+    } else {
+      throw new Error('تعذّر تجهيز الصورة للتعديل.');
     }
-    const editUrl = 'https://prexzyapis.com/ai/imageedit?prompt=' + enc(prompt) + '&image=' + enc(link);
-    let r;
-    try { r = await imageRequest(editUrl, {method: 'GET'}); }
-    catch(e){
-      if (!(e instanceof TypeError) && !/Failed to fetch|NetworkError|aborted/i.test(String(e && e.message))) throw e;
-      r = await imageRequest(viaProxy(editUrl), {method: 'GET'});   /* احتياط CORS فقط */
-    }
+    const r = await pythonImageRequest('/api/models/image/edit', editPayload);
     phase(3); return {url: r.url, blob: r.blob, special: 'image', request_id: '', prompt};
   }
-  /* ---- فيديو: كل الطلبات (GET/POST) عبر البروكسي ---- */
+  /* ---- فيديو عبر خادم البايثون مباشرة (بدون أي بروكسي) ---- */
   const ratio = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4'].includes(String(args.ratio)) ? String(args.ratio) : 'auto';
-  const api = 'https://api.omegatech.app/api/ai/Txt2video?action=generate&prompt=' + enc(prompt) + '&ratio=' + enc(ratio) + '&sound=' + (args.sound === false ? 'false' : 'true');
-  const pr = await fetchTimeout(viaProxy(api), {method: 'GET'}, 240000);
+  const pr = await fetchTimeout('/api/models/video/submit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    credentials: 'same-origin',
+    body: JSON.stringify({prompt: prompt, ratio: ratio, sound: args.sound !== false})
+  }, 245000);
   const text = await pr.text();
   let j = null; try { j = JSON.parse(text); } catch(e){}
   if (!pr.ok || (j && (j.status === false || (j.statusCode && Number(j.statusCode) !== 200))))
-    throw new Error((j && (j.message || j.error)) || ('HTTP ' + pr.status));
+    throw new Error((j && (j.detail || j.message || j.error)) || ('HTTP ' + pr.status));
   let out = j ? findMediaUrl(j, 'video') : ((text.match(/https?:\/\/[^\s"'<>]+/) || [''])[0]);
   const rid = j && (j.request_id || j.task_id || j.taskId || j.id || (j.data && (j.data.task_id || j.data.id)));
   if (!out && rid){
@@ -5401,9 +5535,14 @@ async function runMedia(name, args, phase){
     while (!out && Date.now() - t0 < 240000 && !ai.stopLoop){
       await sleep(5000);
       try {
-        const sr = await fetchTimeout(viaProxy('https://api.omegatech.app/api/ai/Txt2video?action=status&task_id=' + enc(rid) + '&id=' + enc(rid)), {method: 'GET'}, 30000);
+        const sr = await fetchTimeout('/api/models/video/status', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          credentials: 'same-origin',
+          body: JSON.stringify({task_id: String(rid)})
+        }, 35000);
         let sj = null; try { sj = JSON.parse(await sr.text()); } catch(e){}
-        if (sj && (sj.status === 'failed' || sj.status === 'error')) throw new Error(sj.message || 'فشل توليد الفيديو');
+        if (sj && (sj.status === 'failed' || sj.status === 'error')) throw new Error(sj.detail || sj.message || 'فشل توليد الفيديو');
         out = sj ? findMediaUrl(sj, 'video') : '';
       } catch(e){ if (/فشل/.test(e.message)) throw e; }
     }
@@ -5773,17 +5912,15 @@ $('#setClose').addEventListener('click', () => { saveState(); });
    (sampling temperature, mandatory <thinking> block, specialised playbook).
    ===================================================================== */
 (function installAdaptiveRouter(){
-  const ROUTER_VERSION = '58.65.5';
-  const DEFAULT_QWEN_SPACE = 'https://qwen-qwen3-5-omni-offline-demo.hf.space';
-  // One public model; the task profile is selected automatically per turn.
+  const ROUTER_VERSION = '58.65.7-python-direct';
+  const DEFAULT_QWEN_SPACE = '/api/models/qwen';
+  // One unified model routed strictly through our Python FastAPI backend (with native CORS headers, zero external proxies).
   state.routeMode = 'auto';
   localStorage.setItem('g3_route_mode', 'auto');
   S.model = 'auto';
   localStorage.setItem('g3_model', 'auto');
-  state.qwenOmniSpace = localStorage.getItem('g3_qwen_omni_space') ||
-    localStorage.getItem('g3_qwen_plus_space') || localStorage.getItem('g3_qwen_flash_space') || DEFAULT_QWEN_SPACE;
-  state.qwenOmniEndpoint = localStorage.getItem('g3_qwen_omni_endpoint') ||
-    localStorage.getItem('g3_qwen_plus_endpoint') || localStorage.getItem('g3_qwen_flash_endpoint') || 'chat_predict';
+  state.qwenOmniSpace = DEFAULT_QWEN_SPACE;
+  state.qwenOmniEndpoint = localStorage.getItem('g3_qwen_omni_endpoint') || 'chat_predict';
 
   const routeMetaCache = new Map();
   ai.turnRoute = null;
@@ -6313,36 +6450,11 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     }
   }
 
-  /* Qwen Omni connection settings. The endpoint and argument order below
-     are copied from the Qwen HTML supplied by the user, not guessed. */
+  /* Qwen Omni connection via Python backend (/api/models/qwen/*) — zero external browser proxies */
   const routerSettings = document.createElement('section');
   routerSettings.id = 'adaptiveRouterSettings';
-  routerSettings.innerHTML =
-    '<div style="height:1px;background:var(--border);margin:16px 0"></div>'+
-    '<h3 style="font-size:15px;margin:4px 0 5px">اتصال Genisi 4 Atlas</h3>'+
-    '<div class="sub" style="margin-bottom:12px">يتصل Genisi بمساحة Gradio واحدة عبر chat_predict (نص، صوت، صورة، فيديو، سجل المحادثة). يمكنك تغيير رابط المساحة.</div>'+
-    '<div class="field"><label for="qwenOmniSpace">رابط المساحة (Hugging Face Space)</label><input id="qwenOmniSpace" dir="ltr" spellcheck="false" placeholder="https://qwen-qwen3-5-omni-offline-demo.hf.space"></div>'+
-    '<div class="field"><label for="qwenOmniEndpoint">نقطة اتصال Gradio</label><input id="qwenOmniEndpoint" dir="ltr" spellcheck="false" value="chat_predict" placeholder="chat_predict"></div>'+
-    '<div class="sub" style="margin:4px 0 0">يجب أن تكون المساحة عامة أو تسمح بالاستدعاء دون وضع رمز سري داخل المتصفح.</div>';
+  routerSettings.style.display = 'none';
   blk.after(routerSettings);
-
-  function fillRouterSettings(){
-    const a=$('#qwenOmniSpace'), b=$('#qwenOmniEndpoint');
-    if (!a || !b) return;
-    a.value=state.qwenOmniSpace||DEFAULT_QWEN_SPACE;
-    b.value=state.qwenOmniEndpoint||'chat_predict';
-  }
-  fillRouterSettings();
-  new MutationObserver(() => { if ($('#settingsOverlay').classList.contains('on')) fillRouterSettings(); })
-    .observe($('#settingsOverlay'), {attributes:true,attributeFilter:['class']});
-  $('#setClose').addEventListener('click', () => {
-    const cleanSpace = v => String(v||'').trim().replace(/\/+$/,'');
-    state.qwenOmniSpace=cleanSpace($('#qwenOmniSpace') && $('#qwenOmniSpace').value) || DEFAULT_QWEN_SPACE;
-    state.qwenOmniEndpoint=String($('#qwenOmniEndpoint') && $('#qwenOmniEndpoint').value||'chat_predict').trim().replace(/^\/+|\/+$/g,'') || 'chat_predict';
-    localStorage.setItem('g3_qwen_omni_space',state.qwenOmniSpace);
-    localStorage.setItem('g3_qwen_omni_endpoint',state.qwenOmniEndpoint);
-    routeMetaCache.clear();
-  });
 
   function selectRouteMode(){
     state.routeMode='auto';
@@ -6359,7 +6471,6 @@ $('#setClose').addEventListener('click', () => { saveState(); });
       sel:true,
       fn:()=>selectRouteMode('auto')
     }];
-    // Announced future model: visible in the model picker, deliberately disabled.
     modelItems.splice(1,0,{
       html:'<span style="font-size:17px;display:grid;place-items:center;width:22px;height:22px">✦</span>',
       label:'Genisi 4.1 Carbon',
@@ -6367,30 +6478,19 @@ $('#setClose').addEventListener('click', () => { saveState(); });
       disabled:true,
       trailing:'<span title="قريباً" aria-label="مقفل — قريباً" style="display:grid;place-items:center;margin-inline-start:8px;color:var(--text3);flex:none"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.8" y="10.2" width="14.4" height="10.3" rx="2"/><path d="M8 10.2V7.6a4 4 0 0 1 8 0v2.6"/></svg></span>'
     });
-    openPop('#modelPop',anchor,modelItems.concat([{sep:1},{html:I.sliders,label:'إعداد اتصال Atlas',small:'رابط مساحة Gradio',fn:openSettings}]));
+    openPop('#modelPop',anchor,modelItems.concat([{sep:1},{html:I.sliders,label:'الإعدادات',small:'تفضيلات Genisi',fn:openSettings}]));
   };
 
-  async function discoverGradio(space, preferredEndpoint){
-    const normalizedSpace=String(space||'').trim().replace(/\/+$/,'');
+  async function discoverGradio(_space, preferredEndpoint){
     const preferred=String(preferredEndpoint||'chat_predict').trim().replace(/^\/+|\/+$/g,'') || 'chat_predict';
-    const key=normalizedSpace+'|'+preferred;
+    const key='python|'+preferred;
     if (routeMetaCache.has(key)) return routeMetaCache.get(key);
-    let lastError=null;
-    for (const prefix of ['/gradio_api','']){
-      try{
-        const response=await fetchTimeout(normalizedSpace+prefix+'/info',null,12000);
-        if(!response.ok) throw new Error('HTTP '+response.status);
-        const info=await response.json();
-        const named=info.named_endpoints||{};
-        const keys=Object.keys(named);
-        if(!keys.length) throw new Error('لم تعرض المساحة named_endpoints في /info');
-        const chosen=keys.find(k=>k.replace(/^\/+|\/+$/g,'')===preferred);
-        if(!chosen) throw new Error('نقطة Gradio غير موجودة: '+preferred+' — المتاح: '+keys.join(', '));
-        const meta={space:normalizedSpace,prefix,endpoint:chosen.replace(/^\/+|\/+$/g,''),schema:named[chosen]||{}};
-        routeMetaCache.set(key,meta); return meta;
-      }catch(e){lastError=e;}
-    }
-    throw new Error('تعذر اكتشاف واجهة Gradio لمساحة '+normalizedSpace+': '+(lastError&&lastError.message||'غير معروفة'));
+    const response=await fetchTimeout('/api/models/qwen/info?endpoint='+encodeURIComponent(preferred),{credentials:'same-origin'},16000);
+    const info=await response.json().catch(()=>({}));
+    if(!response.ok || !info.ok) throw new Error(info.detail || ('HTTP '+response.status));
+    const meta={space:info.space||'',prefix:info.prefix||'/gradio_api',endpoint:info.endpoint||preferred,schema:info.schema||{}};
+    routeMetaCache.set(key,meta);
+    return meta;
   }
 
   function dataUrlFile(dataUrl, name){
@@ -6408,33 +6508,31 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     const data=fullBody ? S.prefs.full_body_reference_photo : S.prefs.reference_photo;
     return dataUrlFile(data,fullBody?'genisi-full-body-reference.webp':'genisi-reference.webp');
   }
-  async function uploadFilesToSpace(meta, files, signal){
+  async function uploadFilesToSpace(_meta, files, signal){
     const entries=Object.entries(files||{}).filter(([,f])=>f instanceof File);
     if(!entries.length) return {};
-    const fd=new FormData();
-    for(const [,file] of entries) fd.append('files',file,file.name||'upload.bin');
-    const res=await fetch(meta.space+meta.prefix+'/upload',{method:'POST',body:fd,credentials:'omit',signal});
-    const body=await res.text();
-    if(!res.ok) throw new Error('فشل رفع المرفقات إلى المساحة: '+body.slice(0,180));
-    const arr=JSON.parse(body);
-    if(!Array.isArray(arr)||arr.length!==entries.length) throw new Error('استجابة رفع ملفات Gradio غير متوقعة');
     const out={};
-    entries.forEach(([kind],i)=>{
-      const path=typeof arr[i]==='string'?arr[i]:(arr[i]&&arr[i].path)||'';
-      // Match the exact FileData shape used by the supplied Qwen interface.
-      out[kind]={path,meta:{_type:'gradio.FileData'}};
-    });
+    for(const [kind, file] of entries){
+      const qs=new URLSearchParams({name:file.name||'upload.bin',mime:file.type||'application/octet-stream'});
+      const res=await fetch('/api/models/qwen/upload?'+qs.toString(),{
+        method:'POST',
+        headers:{'Content-Type':file.type||'application/octet-stream'},
+        body:file,
+        credentials:'same-origin',
+        signal
+      });
+      const j=await res.json().catch(()=>({}));
+      if(!res.ok || !j.file_data) throw new Error(j.detail || ('فشل رفع المرفقات (HTTP '+res.status+')'));
+      out[kind]=j.file_data;
+      out[kind]._publicUrl=j.url||'';
+    }
     return out;
   }
 
-  /* v58.64 — رفع ملف إلى مساحة المحادثة وإرجاع رابطه العام (يستخدمه تعديل الصور بدل مساحة المحرك المحذوف). */
   ai.uploadPublic = async function(file, name){
-    const route = routeProfile();
-    const meta = await discoverGradio(route.space, route.endpoint);
-    const f = new File([file], name || file.name || 'upload.bin', {type: file.type || 'application/octet-stream'});   // اسم لاتيني ثابت: الرابط يُمرَّر لخدمة خارجية
-    const up = await uploadFilesToSpace(meta, {image: f}, ai.turnSignal || undefined);
-    const path = up.image && up.image.path;
-    return path ? meta.space + meta.prefix + '/file=' + path : '';
+    const f = new File([file], name || file.name || 'upload.bin', {type: file.type || 'application/octet-stream'});
+    const up = await uploadFilesToSpace(null, {image: f}, ai.turnSignal || undefined);
+    return (up.image && up.image._publicUrl) || '';
   };
 
   /* v58.64 — حرارة التوليد تتبع ملمح الدور، وتذكير التفكير يُلحق بنص المستخدم في الحمولة فقط. */
@@ -6499,38 +6597,20 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     if(!rows.length) return '';
     const lang='the same language as the conversation';
     const ask='Create one short, specific chat title (3–7 words) in '+lang+'. Use the central topic, not a generic label. Return only the title, with no quotes, punctuation at the end, or explanation. Conversation:\\n'+rows.map(m=>(m.role==='user'?'User: ':'Assistant: ')+m.content).join('\\n');
-    const space=String(state.qwenOmniSpace||DEFAULT_QWEN_SPACE).replace(/\/+$/,'');
-    const meta=await discoverGradio(space,state.qwenOmniEndpoint||'chat_predict');
     const controller=new AbortController();
-    const timer=setTimeout(()=>controller.abort(),25000);
+    const timer=setTimeout(()=>controller.abort(),28000);
     try{
       const data=[ask,null,null,null,[], 'Return exactly one concise chat title in the requested language.',0.2,0.8,12];
-      const startedRes=await fetch(meta.space+meta.prefix+'/call/'+encodeURIComponent(meta.endpoint),{method:'POST',headers:{'content-type':'application/json'},credentials:'omit',signal:controller.signal,body:JSON.stringify({data})});
-      if(!startedRes.ok) throw new Error('title request '+startedRes.status);
-      const started=await startedRes.json();
-      if(!started||!started.event_id) return '';
-      const stream=await fetch(meta.space+meta.prefix+'/call/'+encodeURIComponent(meta.endpoint)+'/'+encodeURIComponent(started.event_id),{credentials:'omit',signal:controller.signal});
-      if(!stream.ok||!stream.body) return '';
-      const reader=stream.body.getReader(),decoder=new TextDecoder();
-      let buffer='',candidate='',finished=false;
-      while(!finished){
-        const part=await reader.read();
-        if(part.done) break;
-        buffer+=decoder.decode(part.value,{stream:true});
-        let boundary;
-        while((boundary=buffer.indexOf('\n\n'))>=0){
-          const block=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);
-          let ev='',lines=[];
-          for(const line of block.replace(/\r/g,'').split('\n')){if(line.startsWith('event:'))ev=line.slice(6).trim();else if(line.startsWith('data:'))lines.push(line.slice(5).trim());}
-          const joined=lines.join('\n');
-          if(!joined||joined==='null') continue;
-          let payload;try{payload=JSON.parse(joined);}catch(e){continue;}
-          const title=qwenAssistantText(payload);
-          if(title) candidate=title;
-          if(ev==='error') throw new Error('title generation failed');
-          if(ev==='complete') finished=true;
-        }
-      }
+      const r=await fetch('/api/models/qwen/once',{
+        method:'POST',
+        headers:{'content-type':'application/json'},
+        credentials:'same-origin',
+        signal:controller.signal,
+        body:JSON.stringify({data,endpoint:state.qwenOmniEndpoint||'chat_predict'})
+      });
+      if(!r.ok) return '';
+      const j=await r.json().catch(()=>({}));
+      const candidate=j&&j.text||'';
       return String(candidate||'').replace(/<thinking>[\s\S]*?<\/thinking>/gi,'').replace(/```[\s\S]*?```/g,'').replace(/[\r\n]+/g,' ').replace(/^['"“”]+|['"“”]+$/g,'').replace(/[.!؟،]+$/,'').replace(/\s+/g,' ').trim().slice(0,60);
     }finally{clearTimeout(timer);}
   };
@@ -6544,22 +6624,21 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     const data=dataLines.join('\n');
     if(!ev||!data||data==='null') return false;
     let payload;
-    try{payload=JSON.parse(data);}catch(e){throw new Error('تعذّرت قراءة استجابة Qwen Gradio: '+data.slice(0,180));}
+    try{payload=JSON.parse(data);}catch(e){throw new Error('تعذّرت قراءة استجابة المحرك: '+data.slice(0,180));}
     if(ev==='generating'||ev==='complete'){
       const text=qwenAssistantText(payload);
       if(text!==null) onText(text,'');
       return ev==='complete';
     }
-    if(ev==='error') throw new Error('خطأ من مساحة Qwen: '+String((payload&&(payload.message||payload.title||payload.error))||data).slice(0,260));
+    if(ev==='error') throw new Error('خطأ من المحرك: '+String((payload&&(payload.message||payload.title||payload.error))||data).slice(0,260));
     return false;
   }
 
-  async function runQwenProvider(route,text,files,knownMeta,stage){
+  async function runQwenProvider(route,text,files,_knownMeta,stage){
     ai.busy=true;ai.received='';ai.eventId=null;
     const controller=new AbortController();
     ai.controller=controller; S.ctrl=controller;
     try{
-      const meta=knownMeta||await discoverGradio(route.space,route.endpoint);
       const providerFiles=Object.assign({},files||{});
       if(!providerFiles.image){
         const reference=referenceFileForPrompt(text);
@@ -6568,39 +6647,41 @@ $('#setClose').addEventListener('click', () => { saveState(); });
           text=String(text||'')+'\n\n[USER REFERENCE IMAGE ATTACHED: use this image only as a visual reference for the requested depiction; preserve the subject identity and do not infer sensitive traits.]';
         }
       }
-      const uploadMap=await uploadFilesToSpace(meta,providerFiles,controller.signal);
-      const data=buildQwenData(text,uploadMap,stage);
-      /* v58.64: المساحة تُرجع أحياناً بثاً فارغاً عابراً — محاولة ثانية واحدة قبل إعلان الخطأ */
+      const uploadMap=await uploadFilesToSpace(null,providerFiles,controller.signal);
+      const cleanMap={};
+      for(const k of Object.keys(uploadMap)){
+        cleanMap[k]={path:uploadMap[k].path,meta:uploadMap[k].meta};
+      }
+      const data=buildQwenData(text,cleanMap,stage);
       for(let attempt=0;attempt<2;attempt++){
-      const response=await fetch(meta.space+meta.prefix+'/call/'+encodeURIComponent(meta.endpoint),{
-        method:'POST',headers:{'content-type':'application/json'},credentials:'omit',signal:controller.signal,body:JSON.stringify({data})
-      });
-      const body=await response.text();
-      if(!response.ok) throw new Error(route.name+' رفض الطلب (HTTP '+response.status+'): '+body.slice(0,220));
-      const started=JSON.parse(body);
-      if(!started||!started.event_id) throw new Error('لم تُرجع مساحة Qwen event_id');
-      ai.eventId=started.event_id;
-      const stream=await fetch(meta.space+meta.prefix+'/call/'+encodeURIComponent(meta.endpoint)+'/'+encodeURIComponent(started.event_id),{
-        credentials:'omit',signal:controller.signal
-      });
-      if(!stream.ok) throw new Error('فشل فتح بث Qwen (HTTP '+stream.status+')');
-      const reader=stream.body.getReader(),decoder=new TextDecoder();
-      let buffer='',finished=false;
-      while(!finished){
-        const chunk=await reader.read();
-        if(chunk.done) break;
-        buffer+=decoder.decode(chunk.value,{stream:true});
-        let boundary;
-        while((boundary=buffer.indexOf('\n\n'))>=0){
-          const block=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);
-          finished=handleQwenSse(block)||finished;
+        const stream=await fetch('/api/models/qwen/stream',{
+          method:'POST',
+          headers:{'content-type':'application/json'},
+          credentials:'same-origin',
+          signal:controller.signal,
+          body:JSON.stringify({data,endpoint:route.endpoint||'chat_predict'})
+        });
+        if(!stream.ok){
+          const errJ=await stream.json().catch(()=>({}));
+          throw new Error(errJ.detail || (route.name+' رفض الطلب (HTTP '+stream.status+')'));
         }
+        const reader=stream.body.getReader(),decoder=new TextDecoder();
+        let buffer='',finished=false;
+        while(!finished){
+          const chunk=await reader.read();
+          if(chunk.done) break;
+          buffer+=decoder.decode(chunk.value,{stream:true});
+          let boundary;
+          while((boundary=buffer.indexOf('\n\n'))>=0){
+            const block=buffer.slice(0,boundary);buffer=buffer.slice(boundary+2);
+            finished=handleQwenSse(block)||finished;
+          }
+        }
+        if(buffer.trim()) handleQwenSse(buffer);
+        if(ai.received||ai.stopLoop) break;
+        if(attempt===0) await new Promise(r=>setTimeout(r,900));
       }
-      if(buffer.trim()) handleQwenSse(buffer);
-      if(ai.received||ai.stopLoop) break;
-      if(attempt===0) await new Promise(r=>setTimeout(r,900));
-      }
-      if(!ai.received&&!ai.stopLoop) throw new Error('انتهى بث Qwen دون نص. تحقق من endpoint chat_predict ومخطط المساحة.');
+      if(!ai.received&&!ai.stopLoop) throw new Error('انتهى بث المحرك دون نص — أعد المحاولة.');
       return ai.received;
     } finally{
       ai.busy=false;
@@ -6609,48 +6690,29 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     }
   }
 
-  /* v58.63 — نداء واحد غير متدفق لمحرك المحادثة (يستخدمه محسِّن برومت الوسائط refineOnce). */
+  /* v58.64+ — نداء واحد غير متدفق لمحرك المحادثة عبر خادم البايثون (/api/models/qwen/once) */
   ai.qwenOnce = async function(sys, text, image, ms){
     const route = routeProfile('qwen_omni');
-    if (!route.space) throw new Error('chat space is not configured');
-    const ac = new AbortController(), tm = setTimeout(() => ac.abort(), ms || 60000);
+    const ac = new AbortController(), tm = setTimeout(() => ac.abort(), ms || 65000);
     const turn = ai.turnSignal, onStop = () => ac.abort();
     if (turn){ if (turn.aborted) ac.abort(); else turn.addEventListener('abort', onStop, {once: true}); }
     try {
-      const meta = await discoverGradio(route.space, route.endpoint);
       const files = {};
       if (image) files.image = image instanceof File ? image
         : new File([image], 'image.' + (((image.type || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg')), {type: image.type || 'image/png'});
-      const up = await uploadFilesToSpace(meta, files, ac.signal);
-      const data = [String(text || ''), null, up.image || null, null, [], String(sys || ''), 0.4, 0.8, 20];
-      const url = meta.space + meta.prefix + '/call/' + encodeURIComponent(meta.endpoint);
-      const r0 = await fetch(url, {method: 'POST', headers: {'content-type': 'application/json'}, credentials: 'omit', signal: ac.signal, body: JSON.stringify({data})});
-      const j0 = await r0.json();
-      if (!r0.ok || !j0 || !j0.event_id) throw new Error('no event id');
-      const res = await fetch(url + '/' + encodeURIComponent(j0.event_id), {credentials: 'omit', signal: ac.signal});
-      if (!res.ok || !res.body) throw new Error('no stream');
-      const reader = res.body.getReader(), dec = new TextDecoder();
-      let buf = '', out = '', fin = false;
-      const eat = blk => {
-        let ev = '';
-        const d = [];
-        for (const l of blk.replace(/\r/g, '').split('\n')){
-          if (l.startsWith('event:')) ev = l.slice(6).trim();
-          else if (l.startsWith('data:')) d.push(l.slice(5).trim());
-        }
-        if (ev === 'error') throw new Error('provider error');
-        if (ev !== 'generating' && ev !== 'complete') return;
-        try { const t = qwenAssistantText(JSON.parse(d.join('\n'))); if (t !== null) out = t; } catch(e){}
-        if (ev === 'complete') fin = true;
-      };
-      while (!fin){
-        const c = await reader.read(); if (c.done) break;
-        buf += dec.decode(c.value, {stream: true});
-        let ix;
-        while ((ix = buf.indexOf('\n\n')) >= 0){ const blk = buf.slice(0, ix); buf = buf.slice(ix + 2); eat(blk); }
-      }
-      if (!fin && buf.trim()) eat(buf);
-      return out;
+      const up = await uploadFilesToSpace(null, files, ac.signal);
+      const imgFd = up.image ? {path: up.image.path, meta: up.image.meta} : null;
+      const data = [String(text || ''), null, imgFd, null, [], String(sys || ''), 0.4, 0.8, 20];
+      const r = await fetch('/api/models/qwen/once', {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        credentials: 'same-origin',
+        signal: ac.signal,
+        body: JSON.stringify({data, endpoint: route.endpoint || 'chat_predict'})
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.detail || ('HTTP ' + r.status));
+      return String(j.text || '');
     } finally { clearTimeout(tm); if (turn) turn.removeEventListener('abort', onStop); }
   };
 
@@ -6781,13 +6843,15 @@ $('#setClose').addEventListener('click', () => { saveState(); });
   ai.voiceTurn = async function(opts){
     opts = opts || {};
     const route = routeProfile();
-    const meta = await discoverGradio(route.space, route.endpoint);
     const signal = opts.signal;
     const files = {};
     if (opts.audio instanceof File) files.audio = opts.audio;
     if (opts.image instanceof File) files.image = opts.image;
     if (opts.video instanceof File) files.video = opts.video;
-    const up = await uploadFilesToSpace(meta, files, signal);
+    const up = await uploadFilesToSpace(null, files, signal);
+    const audFd = up.audio ? {path: up.audio.path, meta: up.audio.meta} : null;
+    const imgFd = up.image ? {path: up.image.path, meta: up.image.meta} : null;
+    const vidFd = up.video ? {path: up.video.path, meta: up.video.meta} : null;
     const hist = (Array.isArray(opts.history) ? opts.history : []).slice(-18).map(m => ({
       role: m.role === 'assistant' ? 'assistant' : 'user',
       content: String(m.content || '')
@@ -6796,27 +6860,26 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     const msg = String(opts.text || '') + (opts.docs ? String(opts.docs) : '');
     const data = [
       msg,
-      up.audio || null,
-      up.image || null,
-      up.video ? {video: up.video, subtitles: null} : null,
+      audFd,
+      imgFd,
+      vidFd ? {video: vidFd, subtitles: null} : null,
       hist,
       sys,
       0.55,
       0.85,
       25
     ];
-    const callUrl = meta.space + meta.prefix + '/call/' + encodeURIComponent(meta.endpoint);
-    const r0 = await fetch(callUrl, {
+    const stream = await fetch('/api/models/qwen/stream', {
       method: 'POST',
       headers: {'content-type': 'application/json'},
-      credentials: 'omit',
+      credentials: 'same-origin',
       signal: signal,
-      body: JSON.stringify({data: data})
+      body: JSON.stringify({data: data, endpoint: route.endpoint || 'chat_predict'})
     });
-    const j0 = await r0.json();
-    if (!r0.ok || !j0 || !j0.event_id) throw new Error('تعذّر بدء جلسة المحادثة الصوتية');
-    const stream = await fetch(callUrl + '/' + encodeURIComponent(j0.event_id), {credentials: 'omit', signal: signal});
-    if (!stream.ok || !stream.body) throw new Error('انقطع بث المحادثة الصوتية');
+    if (!stream.ok || !stream.body){
+      const errJ = await stream.json().catch(() => ({}));
+      throw new Error(errJ.detail || 'تعذّر بدء جلسة المحادثة الصوتية');
+    }
     const reader = stream.body.getReader(), dec = new TextDecoder();
     let buf = '', latest = '', done = false;
     const parseBlk = blk => {
@@ -6853,8 +6916,7 @@ $('#setClose').addEventListener('click', () => { saveState(); });
 
   runTurn=async function(text,files,stage){
     const route=ai.turnRoute||{...routeProfile(),profile:'general',sampling:null,think:''};
-    const meta=await discoverGradio(route.space,route.endpoint);
-    const reply=await runQwenProvider(route,text,files,meta,stage);
+    const reply=await runQwenProvider(route,text,files,null,stage);
     if(reply&&live&&/```genfile/i.test(reply)){try{await processFiles(reply);}catch(e){console.warn(e);}}
     return reply==null?reply:histClean(reply);
   };
@@ -7715,104 +7777,33 @@ function syncPendingSessionMedia(){ if (typeof window.syncPendingSessionMedia ==
     const baseLang = String(langCode || '').toLowerCase();
     const doNormalize = !hasNonEnZh && (baseLang.startsWith('en') || baseLang.startsWith('zh'));
 
-    // 1) Try same-origin FastAPI proxy (/api/voice/tts -> openbmb/VoxCPM-Demo)
-    if (!voiceState.anchorBlob){
-      try {
-        const res = await fetch('/api/voice/tts', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          credentials: 'same-origin',
-          signal: signal,
-          body: JSON.stringify({
-            text: text,
-            control_instruction: controlInstruction,
-            cfg_value: 2.0,
-            do_normalize: doNormalize
-          })
-        });
-        if (res.ok && /^audio\//i.test(res.headers.get('content-type') || '')){
-          const blob = await res.blob();
-          if (blob && blob.size > 200){
-            voiceState.anchorBlob = blob;
-            return blob;
-          }
-        }
-      } catch(e){
-        if (e && e.name === 'AbortError') throw e;
-      }
+    // Direct Python FastAPI synthesis (/api/voice/tts -> openbmb/VoxCPM-Demo) — zero direct browser proxy calls
+    const reqBody = {
+      text: text,
+      control_instruction: controlInstruction,
+      cfg_value: 2.0,
+      do_normalize: doNormalize
+    };
+    if (voiceState.anchorB64){
+      reqBody.reference_audio_base64 = voiceState.anchorB64;
     }
-
-    // 2) Direct browser Gradio fallback to https://openbmb-voxcpm-demo.hf.space
-    const meta = await ai.discoverGradio(VOXCPM_SPACE_URL, 'generate');
-    let refFile = voiceState.anchorFileData || null;
-    if (!refFile && voiceState.anchorBlob && typeof ai.uploadFilesToSpace === 'function'){
-      try {
-        const f = new File([voiceState.anchorBlob], 'voice-anchor.wav', {type: voiceState.anchorBlob.type || 'audio/wav'});
-        const up = await ai.uploadFilesToSpace(meta, {ref: f}, signal);
-        if (up && up.ref) { voiceState.anchorFileData = up.ref; refFile = up.ref; }
-      } catch(e){}
-    }
-    const callData = [
-      text,
-      refFile ? '' : String(controlInstruction || ''),
-      refFile,
-      false,
-      '',
-      2.0,
-      doNormalize,
-      false
-    ];
-    const callUrl = meta.space + meta.prefix + '/call/' + encodeURIComponent(meta.endpoint);
-    const r0 = await fetch(callUrl, {
+    const res = await fetch('/api/voice/tts', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      credentials: 'omit',
+      credentials: 'same-origin',
       signal: signal,
-      body: JSON.stringify({data: callData})
+      body: JSON.stringify(reqBody)
     });
-    const j0 = await r0.json();
-    if (!r0.ok || !j0 || !j0.event_id) throw new Error('تعذّر الاتصال بمحرك الصوت VoxCPM');
-    const stream = await fetch(callUrl + '/' + encodeURIComponent(j0.event_id), {credentials: 'omit', signal: signal});
-    if (!stream.ok || !stream.body) throw new Error('انقطع بث محرك الصوت VoxCPM');
-    const reader = stream.body.getReader(), dec = new TextDecoder();
-    let buf = '', audioOutUrl = '', done = false;
-    const parseEvt = blk => {
-      let ev = '';
-      const ds = [];
-      for (const l of blk.replace(/\r/g, '').split('\n')){
-        if (l.startsWith('event:')) ev = l.slice(6).trim();
-        else if (l.startsWith('data:')) ds.push(l.slice(5).trim());
-      }
-      if (ev === 'error') throw new Error('خطأ في توليد الصوت عبر VoxCPM');
-      if (ev !== 'complete') return;
-      try {
-        const parsed = JSON.parse(ds.join('\n'));
-        const item = Array.isArray(parsed) ? parsed[0] : parsed;
-        if (typeof item === 'string') audioOutUrl = item;
-        else if (item && typeof item === 'object'){
-          if (item.url) audioOutUrl = item.url;
-          else if (item.path) audioOutUrl = meta.space + meta.prefix + '/file=' + item.path;
-        }
-      } catch(e){}
-      done = true;
-    };
-    while (!done){
-      const c = await reader.read();
-      if (c.done) break;
-      buf += dec.decode(c.value, {stream: true});
-      let ix;
-      while ((ix = buf.indexOf('\n\n')) >= 0){
-        const blk = buf.slice(0, ix); buf = buf.slice(ix + 2);
-        parseEvt(blk);
-      }
+    if (!res.ok){
+      const errJ = await res.json().catch(() => ({}));
+      throw new Error(errJ.detail || ('تعذّر توليد الصوت (HTTP ' + res.status + ')'));
     }
-    if (!done && buf.trim()) parseEvt(buf);
-    if (!audioOutUrl) throw new Error('لم يُرجع محرك VoxCPM مقطعاً صوتياً');
-    if (audioOutUrl.startsWith('/')) audioOutUrl = meta.space + audioOutUrl;
-    const ar = await fetch(audioOutUrl, {credentials: 'omit', signal: signal});
-    if (!ar.ok) throw new Error('تعذّر تحميل الصوت المولّد');
-    const blob = await ar.blob();
-    if (!voiceState.anchorBlob && blob && blob.size > 200) voiceState.anchorBlob = blob;
+    const blob = await res.blob();
+    if (!blob || blob.size <= 200) throw new Error('لم يُرجع محرك الصوت مقطعاً صالحاً');
+    if (!voiceState.anchorBlob && blob.size < 4500000){
+      voiceState.anchorBlob = blob;
+      blobToBase64Raw(blob).then(b64 => { if (b64) voiceState.anchorB64 = b64; }).catch(() => {});
+    }
     return blob;
   }
 
@@ -8167,15 +8158,13 @@ function syncPendingSessionMedia(){ if (typeof window.syncPendingSessionMedia ==
       setVoiceCaption(finalSpoken, false);
       setVoiceMode('thinking', T().voiceSynth);
 
-      // Append assistant message to conversation
+      // Append assistant message to conversation (using native addAiStatic — fixes addBubble ReferenceError)
       const aiMsg = {role: 'assistant', content: finalSpoken, media: []};
       S.msgs.push(aiMsg);
-      const b = addBubble('assistant', finalSpoken);
+      const b = addAiStatic(finalSpoken, [], false);
       saveHistory(); renderSessions();
 
-      // Synthesize & stream chunks sequentially via openbmb/VoxCPM-Demo
-      // (VoxCPM enforces MAX_CONCURRENT_GENERATIONS_PER_SESSION=1, so chunk i+1 starts
-      //  synthesizing only AFTER chunk i finishes, pipelining behind audio playback.)
+      // Synthesize & stream chunks sequentially via Python /api/voice/tts -> openbmb/VoxCPM-Demo
       const ttsCtl = new AbortController();
       voiceState.ttsCtl = ttsCtl;
       const chunks = splitSpokenChunks(finalSpoken);
@@ -8207,7 +8196,17 @@ function syncPendingSessionMedia(){ if (typeof window.syncPendingSessionMedia ==
         aiMsg.media.push({id: aid, kind: 'audio', url: '/api/media/' + aid, title: vTitle});
         if (b){
           const mc = mediaCard(aiMsg.media[aiMsg.media.length - 1]);
-          if (mc) b.appendChild(mc);
+          if (mc){
+            let tb = b.querySelector('.toolbox');
+            if (!tb){
+              tb = document.createElement('div');
+              tb.className = 'toolbox';
+              const bodyEl = b.querySelector('.body');
+              if (bodyEl) b.insertBefore(tb, bodyEl);
+              else b.appendChild(tb);
+            }
+            tb.appendChild(mc);
+          }
         }
         saveHistory(); renderGallery();
       }
