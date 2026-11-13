@@ -1406,7 +1406,9 @@ async def get_history(request: Request):
         await asyncio.to_thread(purge_expired_user_media, uid)
         record = await asyncio.to_thread(_store().get_user, uid) or record
     sessions = record.get("sessions", []) if isinstance(record.get("sessions"), list) else []
-    return {"sessions": sessions, "media_ttl_days": MEDIA_TTL_DAYS}
+    media_assets = record.get("media_assets") if isinstance(record.get("media_assets"), dict) else {}
+    media_ids = sorted(str(k) for k in media_assets.keys() if isinstance(k, str))
+    return {"sessions": sessions, "media_ttl_days": MEDIA_TTL_DAYS, "media_ids": media_ids}
 
 
 @router.post("/api/history/save")

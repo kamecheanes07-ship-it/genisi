@@ -67,7 +67,6 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
         ga.COOKIE_SECURE = False
         ga.COOKIE_SAMESITE = "lax"
         ga.PARTITIONED_COOKIES = False
-        main_mod._music_schema_cache.update({"ts": 0.0, "submit_props": None})
         main_mod._voxcpm_meta_cache.update({"ts": 0.0, "prefix": None})
 
         self.ga = ga
@@ -198,7 +197,9 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
         self.assertEqual(save_res.status_code, 200, save_res.text)
         hist_res = self.client.get("/api/history")
         self.assertEqual(hist_res.status_code, 200)
-        loaded_msgs = hist_res.json()["sessions"][0]["msgs"]
+        hist_json = hist_res.json()
+        self.assertEqual(hist_json["media_ids"], ["a_svg01", "m_aud01", "m_img01"])
+        loaded_msgs = hist_json["sessions"][0]["msgs"]
         self.assertEqual(loaded_msgs[0]["atts"][0]["id"], "a_svg01")
         self.assertEqual(loaded_msgs[0]["atts"][0]["url"], "/api/media/a_svg01")
         self.assertEqual(loaded_msgs[1]["media"][0]["id"], "m_img01")
@@ -273,21 +274,24 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
 
     def test_stepaudio3_music_submit_and_query_proxy(self) -> None:
         real_async_client = httpx.AsyncClient
+        submitted_payloads: list[dict] = []
 
         def handler(req: httpx.Request) -> httpx.Response:
             url = str(req.url)
-            if url.endswith("/openapi.json"):
-                return httpx.Response(200, json={"paths": {}})
             if url.endswith("/v1/audio/music/submit"):
-                return httpx.Response(200, json={"task_id": "step_task_99", "status": "queued"})
+                body = json.loads(req.content.decode("utf-8"))
+                submitted_payloads.append(body)
+                return httpx.Response(200, json={"task_id": "step_task_99"})
             if url.endswith("/v1/audio/music/query"):
                 body = json.loads(req.content.decode("utf-8"))
                 return httpx.Response(
                     200,
                     json={
                         "task_id": body["task_id"],
-                        "status": "succeeded",
-                        "audio_url": "/outputs/step_task_99.mp3",
+                        "status": "SUCCESS",
+                        "response_format": "mp3",
+                        "audio": "//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA",
+                        "rewritten_lyrics": "[Verse 1]\nنسيم الفجر يغني",
                     },
                 )
             raise AssertionError(f"Unexpected upstream URL: {url}")
@@ -298,26 +302,78 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             "AsyncClient",
             side_effect=lambda **kw: real_async_client(transport=transport, **{k: v for k, v in kw.items() if k != "transport"}),
         ):
+            # Case A: Instrumental track -> must set instrumental=True, omit lyrics, and strip unknown fields (duration, vocal_language)
             sub = self.client.post(
                 "/api/music/submit",
                 json={
                     "task": "text_to_music",
                     "caption": "Warm acoustic Arabic oud and gentle lo-fi hip hop beat, 88 BPM",
                     "instrumental": True,
+                    "lyrics": "[Instrumental]",
                     "duration": 45,
+                    "vocal_language": "ar",
                 },
             )
             self.assertEqual(sub.status_code, 200, sub.text)
             self.assertEqual(sub.json()["task_id"], "step_task_99")
+            self.assertEqual(
+                submitted_payloads[-1],
+                {
+                    "model_id": "step-music",
+                    "response_format": "mp3",
+                    "sample_rate": 44100,
+                    "bit_rate": 192,
+                    "task": "text_to_music",
+                    "caption": "Warm acoustic Arabic oud and gentle lo-fi hip hop beat, 88 BPM",
+                    "instrumental": True,
+                },
+            )
 
+            # Case B: Vocal track -> must omit `instrumental` key completely and pass `lyrics`
+            sub_vocal = self.client.post(
+                "/api/music/submit",
+                json={
+                    "task": "text_to_music",
+                    "caption": "Modern Arabic pop ballad with strings and piano",
+                    "instrumental": False,
+                    "lyrics": "[Verse]\nيا ليل الساهرين",
+                },
+            )
+            self.assertEqual(sub_vocal.status_code, 200, sub_vocal.text)
+            self.assertEqual(
+                submitted_payloads[-1],
+                {
+                    "model_id": "step-music",
+                    "response_format": "mp3",
+                    "sample_rate": 44100,
+                    "bit_rate": 192,
+                    "task": "text_to_music",
+                    "caption": "Modern Arabic pop ballad with strings and piano",
+                    "lyrics": "[Verse]\nيا ليل الساهرين",
+                },
+            )
+
+            # Query returns raw base64 audio untouched
             qry = self.client.post("/api/music/query", json={"task_id": "step_task_99"})
             self.assertEqual(qry.status_code, 200, qry.text)
             data = qry.json()
-            self.assertEqual(data["status"], "succeeded")
-            self.assertEqual(
-                data["audio_url"],
-                "https://stepfun-ai-stepaudio-3-music.hf.space/outputs/step_task_99.mp3",
-            )
+            self.assertEqual(data["status"], "SUCCESS")
+            self.assertEqual(data["audio"], "//uQxAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA")
+            self.assertEqual(data["rewritten_lyrics"], "[Verse 1]\nنسيم الفجر يغني")
+
+    def test_workspace_and_agent_state_do_not_503_when_sandbox_unconfigured(self) -> None:
+        self._register_user(self.client, "regular_user", "regular@example.com")
+        ws = self.client.get("/api/workspace")
+        self.assertEqual(ws.status_code, 200, ws.text)
+        self.assertEqual(ws.json(), {"success": True, "entries": [], "truncated": False, "sandbox_enabled": False})
+
+        ag = self.client.get("/api/agent/state")
+        self.assertEqual(ag.status_code, 200, ag.text)
+        self.assertEqual(ag.json(), {"plan": [], "notes": [], "sessions": 0, "updated": None, "sandbox_enabled": False})
+
+        # Direct workspace file read remains strictly protected when sandbox is unconfigured
+        wf = self.client.get("/api/workspace/file?path=README.md")
+        self.assertEqual(wf.status_code, 503)
 
     def test_voxcpm_voice_tts_disables_normalizer_for_arabic_and_streams_audio(self) -> None:
         captured_call_payload = {}

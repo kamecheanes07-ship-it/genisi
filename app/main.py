@@ -160,12 +160,21 @@ def health() -> dict[str, Any]:
     }
 
 
+def is_sandbox_available_for(user: dict[str, Any]) -> bool:
+    """Check whether the optional local owner-only workspace runner is active for this user."""
+    if not WORKER.enabled:
+        return False
+    owner_email = os.getenv("SANDBOX_OWNER_EMAIL", "").strip().lower()
+    if not owner_email:
+        return False
+    return user.get("email", "").strip().lower() == owner_email
+
+
 @app.get("/api/workspace")
 async def get_workspace(request: Request) -> dict[str, Any]:
     user = current_user(request)
-    ensure_sandbox_owner(user)
-    if not WORKER.enabled:
-        raise HTTPException(503, "Workspace runner is disabled. Set SANDBOX_MODE=local.")
+    if not is_sandbox_available_for(user):
+        return {"success": True, "entries": [], "truncated": False, "sandbox_enabled": False}
     workspace_id = default_workspace_key(user["id"])
     try:
         result = await WORKER.request("GET", f"/v1/files/{workspace_id}", params={"path": "."})
@@ -180,7 +189,7 @@ async def get_workspace(request: Request) -> dict[str, Any]:
                 "path": rel,
                 "size": item.get("size"),
             })
-        return {"success": True, "entries": entries, "truncated": bool(result.get("truncated"))}
+        return {"success": True, "entries": entries, "truncated": bool(result.get("truncated")), "sandbox_enabled": True}
     except Exception as exc:
         raise HTTPException(502, f"تعذر قراءة مساحة العمل: {str(exc)[:300]}") from exc
 
@@ -232,8 +241,9 @@ async def download_workspace_file(path: str, request: Request) -> FileResponse:
 @app.get("/api/agent/state")
 async def agent_state(request: Request) -> dict[str, Any]:
     user = current_user(request)
-    ensure_sandbox_owner(user)
-    return {"plan": [], "notes": [], "sessions": 0, "updated": None}
+    if not is_sandbox_available_for(user):
+        return {"plan": [], "notes": [], "sessions": 0, "updated": None, "sandbox_enabled": False}
+    return {"plan": [], "notes": [], "sessions": 0, "updated": None, "sandbox_enabled": True}
 
 
 @app.get("/api/windows12/prompt/status")
@@ -408,8 +418,14 @@ def _normalize_space_media_urls(obj: Any, base_url: str) -> Any:
     if isinstance(obj, dict):
         out: dict[str, Any] = {}
         for k, v in obj.items():
-            if isinstance(v, str) and v.startswith("/") and (
-                "url" in k.lower() or "audio" in k.lower() or v.endswith((".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"))
+            if (
+                isinstance(v, str)
+                and not v.startswith("//")
+                and len(v) < 1024
+                and (
+                    v.startswith(("/v1/", "/outputs/", "/files/", "/audio/", "/gradio_api/", "/file="))
+                    or (v.startswith("/") and v.endswith((".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus")))
+                )
             ):
                 out[k] = urljoin(base_url + "/", v.lstrip("/"))
             else:
@@ -420,66 +436,100 @@ def _normalize_space_media_urls(obj: Any, base_url: str) -> Any:
     return obj
 
 
-async def _get_stepaudio_submit_props(client: httpx.AsyncClient) -> set[str] | None:
-    now = time.time()
-    if _music_schema_cache["submit_props"] is not None and now - float(_music_schema_cache["ts"]) < 3600:
-        return _music_schema_cache["submit_props"]
-    try:
-        r = await client.get(f"{STEPAUDIO_MUSIC_SPACE_URL}/openapi.json", timeout=8.0)
-        if r.status_code == 200:
-            spec = r.json()
-            post_op = (((spec.get("paths") or {}).get("/v1/audio/music/submit") or {}).get("post") or {})
-            schema = ((((post_op.get("requestBody") or {}).get("content") or {}).get("application/json") or {}).get("schema") or {})
-            ref = schema.get("$ref", "")
-            if ref.startswith("#/components/schemas/"):
-                sname = ref.split("/")[-1]
-                schema = ((spec.get("components") or {}).get("schemas") or {}).get(sname) or {}
-            props = schema.get("properties")
-            if isinstance(props, dict) and props:
-                prop_set = set(props.keys())
-                _music_schema_cache["submit_props"] = prop_set
-                _music_schema_cache["ts"] = now
-                return prop_set
-    except Exception:
-        pass
-    return None
+def _extract_stepaudio_error(data: Any, status_code: int) -> str:
+    if isinstance(data, dict):
+        err = data.get("error")
+        if isinstance(err, dict):
+            err_type = str(err.get("type") or "").strip()
+            err_msg = str(err.get("message") or "").strip()
+            if err_type == "rate_limited" or status_code == 429:
+                return "خدمة تأليف الموسيقى مشغولة حالياً (حد الطلبات بالدقيقة) — يرجى المحاولة بعد قليل."
+            if err_type and err_msg:
+                return f"{err_msg} ({err_type})"
+            if err_msg or err_type:
+                return err_msg or err_type
+        for k in ("detail", "error", "message"):
+            v = data.get(k)
+            if isinstance(v, str) and v.strip():
+                return v.strip()
+    return f"StepAudio HTTP {status_code}"
+
+
+def _strip_data_uri_prefix(raw: str) -> str:
+    val = str(raw or "").strip()
+    if val.startswith("data:") and "," in val:
+        return val.split(",", 1)[1].strip()
+    return val
 
 
 @app.post("/api/music/submit")
 async def music_submit(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Proxy music generation submissions to stepfun-ai/StepAudio-3-Music."""
+    """Proxy music generation submissions to stepfun-ai/StepAudio-3-Music using its official step-music contract."""
     _origin_guard(request)
     _rate_limit("music-submit:" + _sha(_client_ip(request)), 20, 300)
-    task = str(payload.get("task") or "text_to_music").strip()
+    task = str(payload.get("task") or "text_to_music").strip().lower()
     if task not in {"text_to_music", "vocal_to_music", "music_cover"}:
         task = "text_to_music"
-    caption = str(payload.get("caption") or payload.get("prompt") or "").strip()[:2000]
+    caption = str(payload.get("caption") or payload.get("prompt") or "").strip()[:500]
     if not caption:
         raise HTTPException(422, "يرجى إدخال وصف الموسيقى (caption)")
-    body: dict[str, Any] = {"task": task, "caption": caption}
-    for opt_key in ("lyrics", "instrumental", "duration", "vocal_language", "audio_base64", "src_audio_base64", "reference_audio", "audio_url", "audio", "seed"):
-        if opt_key in payload and payload[opt_key] is not None and payload[opt_key] != "":
-            body[opt_key] = payload[opt_key]
+
+    resp_fmt = str(payload.get("response_format") or "mp3").strip().lower()
+    if resp_fmt not in {"mp3", "wav", "flac", "opus"}:
+        resp_fmt = "mp3"
+    sample_rate = payload.get("sample_rate")
+    sample_rate = sample_rate if sample_rate in {16000, 24000, 32000, 44100, 48000} else 44100
+
+    send_body: dict[str, Any] = {
+        "model_id": "step-music",
+        "response_format": resp_fmt,
+        "sample_rate": sample_rate,
+        "task": task,
+        "caption": caption,
+    }
+    if resp_fmt in {"mp3", "opus"}:
+        bit_rate = payload.get("bit_rate")
+        send_body["bit_rate"] = bit_rate if bit_rate in {64, 128, 192, 256, 320} else 192
+
+    raw_lyrics = str(payload.get("lyrics") or "").strip()[:4000]
+    if raw_lyrics.lower() in {"[instrumental]", "instrumental"}:
+        raw_lyrics = ""
+
+    vocal_b64 = _strip_data_uri_prefix(payload.get("vocal_audio") or payload.get("audio_base64") or "")
+    song_b64 = _strip_data_uri_prefix(payload.get("song_audio") or payload.get("src_audio_base64") or payload.get("audio_base64") or "")
+
+    if task == "vocal_to_music":
+        if vocal_b64:
+            send_body["vocal_audio"] = vocal_b64
+            if raw_lyrics:
+                send_body["lyrics"] = raw_lyrics
+        else:
+            send_body["task"] = "text_to_music"
+            task = "text_to_music"
+    elif task == "music_cover":
+        if song_b64:
+            send_body["song_audio"] = song_b64
+            if raw_lyrics:
+                send_body["lyrics"] = raw_lyrics
+        else:
+            send_body["task"] = "text_to_music"
+            task = "text_to_music"
+
+    if task == "text_to_music":
+        if bool(payload.get("instrumental")):
+            # Official StepAudio-3-Music contract: instrumental tracks set instrumental=True and omit lyrics.
+            send_body["instrumental"] = True
+        elif raw_lyrics:
+            send_body["lyrics"] = raw_lyrics
 
     try:
-        async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
-            allowed_props = await _get_stepaudio_submit_props(client)
-            send_body = {k: v for k, v in body.items() if (allowed_props is None or k in allowed_props)} if allowed_props else dict(body)
-            if "task" not in send_body and (allowed_props is None or "task" in allowed_props):
-                send_body["task"] = task
-            if "caption" not in send_body and (allowed_props is None or "caption" in allowed_props):
-                send_body["caption"] = caption
-
+        timeout = httpx.Timeout(230.0, connect=15.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             upstream = await client.post(f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/submit", json=send_body)
-            if upstream.status_code == 422 and len(send_body) > 2:
-                minimal: dict[str, Any] = {"task": task, "caption": caption}
-                if body.get("lyrics"):
-                    minimal["lyrics"] = body["lyrics"]
-                upstream = await client.post(f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/submit", json=minimal)
             data = upstream.json() if upstream.content else {}
             if upstream.status_code >= 400:
-                detail = data.get("detail") or data.get("error") or data.get("message") or f"StepAudio HTTP {upstream.status_code}"
-                raise HTTPException(upstream.status_code if upstream.status_code < 500 else 502, str(detail)[:320])
+                detail = _extract_stepaudio_error(data, upstream.status_code)
+                raise HTTPException(upstream.status_code if upstream.status_code < 500 else 502, detail[:320])
             return _normalize_space_media_urls(data, STEPAUDIO_MUSIC_SPACE_URL)
     except HTTPException:
         raise
@@ -496,12 +546,13 @@ async def music_query(request: Request, payload: dict[str, Any] = Body(...)) -> 
     if not task_id:
         raise HTTPException(422, "معرّف المهمة task_id مطلوب")
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        timeout = httpx.Timeout(45.0, connect=15.0)
+        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             upstream = await client.post(f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/query", json={"task_id": task_id})
             data = upstream.json() if upstream.content else {}
             if upstream.status_code >= 400:
-                detail = data.get("detail") or data.get("error") or data.get("message") or f"StepAudio HTTP {upstream.status_code}"
-                raise HTTPException(upstream.status_code if upstream.status_code < 500 else 502, str(detail)[:320])
+                detail = _extract_stepaudio_error(data, upstream.status_code)
+                raise HTTPException(upstream.status_code if upstream.status_code < 500 else 502, detail[:320])
             return _normalize_space_media_urls(data, STEPAUDIO_MUSIC_SPACE_URL)
     except HTTPException:
         raise

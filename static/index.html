@@ -5172,35 +5172,62 @@ async function refineOnce(name, prompt, args){
     return out;
   } catch(e){ try { console.warn('[refine]', e); } catch(_){} return null; }
 }
+function formatStepAudioErr(obj, status){
+  if (obj && typeof obj === 'object'){
+    if (typeof obj.detail === 'string' && obj.detail.trim()) return obj.detail.trim();
+    const err = obj.error || (obj.data && obj.data.error);
+    if (err && typeof err === 'object'){
+      const stage = String(err.stage || '').trim();
+      const type = String(err.type || '').trim();
+      const msg = String(err.message || '').trim();
+      if (type === 'rate_limited' || status === 429) return 'خدمة تأليف الموسيقى مشغولة حالياً (حد الطلبات بالدقيقة) — أعد المحاولة بعد دقيقة.';
+      if (stage === 'censor') return 'تعذّر إتمام الطلب بسبب قيود محتوى الخدمة — جرّب وصفاً أو كلمات مختلفة.';
+      if (stage === 'no_speech_detected') return 'لم يُكتشف صوت غنائي واضح في التسجيل المرفق.';
+      if (stage === 'audio_transcode') return 'تعذّرت قراءة صيغة الملف الصوتي المرفق — جرّب ملف MP3 أو WAV.';
+      if (msg && type) return msg + ' (' + type + ')';
+      if (msg || type || stage) return msg || type || stage;
+    }
+    if (typeof err === 'string' && err.trim()) return err.trim();
+    if (typeof obj.message === 'string' && obj.message.trim()) return obj.message.trim();
+  }
+  return 'StepAudio HTTP ' + (status || 'error');
+}
 async function postStepAudioJson(relPath, payload, timeoutMs){
   const bodyStr = JSON.stringify(payload || {});
   const proxyMap = {'/v1/audio/music/submit': '/api/music/submit', '/v1/audio/music/query': '/api/music/query'};
-  const localEndpoint = proxyMap[relPath];
+  const localEndpoint = location.protocol !== 'file:' ? proxyMap[relPath] : null;
   if (localEndpoint){
+    let proxyErr = null;
     try {
+      const hdrs = {'Content-Type': 'application/json'};
+      const csrfPart = document.cookie.split('; ').find(x => x.startsWith('genisi_csrf='));
+      if (csrfPart) hdrs['X-CSRF-Token'] = decodeURIComponent(csrfPart.slice('genisi_csrf='.length));
       const lr = await fetchTimeout(localEndpoint, {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: hdrs,
         body: bodyStr,
         credentials: 'same-origin'
-      }, timeoutMs || 45000);
+      }, timeoutMs || 240000);
       const ltxt = await lr.text();
       let lj = null; try { lj = JSON.parse(ltxt); } catch(e){}
       if (lr.ok && lj) return lj;
-      if (lr.status === 422 && lj && lj.detail) throw new Error(String(lj.detail));
+      if (lr.status >= 400 && lr.status < 500 && lr.status !== 404){
+        proxyErr = new Error(formatStepAudioErr(lj, lr.status));
+      }
     } catch(e){
       if (e && e.name === 'AbortError') throw e;
     }
+    if (proxyErr) throw proxyErr;
   }
   const direct = await fetchTimeout(STEPAUDIO_SPACE_URL + relPath, {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: bodyStr
-  }, timeoutMs || 45000);
+  }, timeoutMs || 240000);
   const dtxt = await direct.text();
   let dj = null; try { dj = JSON.parse(dtxt); } catch(e){}
   if (!direct.ok){
-    throw new Error((dj && (dj.detail || dj.error || dj.message)) || ('StepAudio HTTP ' + direct.status));
+    throw new Error(formatStepAudioErr(dj, direct.status));
   }
   return dj || {};
 }
@@ -5212,73 +5239,110 @@ function blobToBase64Raw(blob){
     fr.readAsDataURL(blob);
   });
 }
+async function base64AudioToBlob(b64, fmt){
+  const clean = String(b64 || '').replace(/^data:[^,]+,/, '').replace(/\s+/g, '');
+  const mimeMap = {mp3: 'audio/mpeg', wav: 'audio/wav', flac: 'audio/flac', opus: 'audio/ogg; codecs=opus'};
+  const mime = mimeMap[String(fmt || 'mp3').toLowerCase()] || 'audio/mpeg';
+  const r = await fetch('data:' + mime + ';base64,' + clean);
+  return await r.blob();
+}
 async function runStepAudioMusic(args, fallbackPrompt, phase){
   let task = String(args.task || 'text_to_music').trim().toLowerCase();
   if (!['text_to_music', 'vocal_to_music', 'music_cover'].includes(task)) task = 'text_to_music';
-  const caption = String(args.caption || args.style || fallbackPrompt || '').trim().slice(0, 1800);
+  const caption = String(args.caption || args.style || fallbackPrompt || '').trim().slice(0, 500);
   if (!caption) throw new Error('وصف الموسيقى (caption) مفقود.');
   const instrumental = Boolean(args.instrumental);
-  const lyrics = instrumental
-    ? (String(args.lyrics || '[Instrumental]').trim())
-    : String(args.lyrics || '').trim().slice(0, 4000);
+  let cleanLyrics = String(args.lyrics || '').trim().slice(0, 4000);
+  if (/^\[?instrumental\]?$/i.test(cleanLyrics)) cleanLyrics = '';
   const title = String(args.title || args.name || '').trim().slice(0, 120) || (S.lang === 'ar' ? 'مقطوعة موسيقية — StepAudio 3' : 'StepAudio 3 Track');
+
+  // Official stepfun-ai/StepAudio-3-Music payload contract (strictly validated upstream)
   const payload = {
+    model_id: 'step-music',
+    response_format: 'mp3',
+    sample_rate: 44100,
+    bit_rate: 192,
     task: task,
-    caption: caption,
-    instrumental: instrumental
+    caption: caption
   };
-  if (lyrics) payload.lyrics = lyrics;
-  if (args.duration != null && Number.isFinite(Number(args.duration))){
-    payload.duration = Math.max(15, Math.min(240, Math.round(Number(args.duration))));
-  }
-  if (args.vocal_language) payload.vocal_language = String(args.vocal_language).trim().slice(0, 16);
-  if ((task === 'vocal_to_music' || task === 'music_cover')){
-    if (typeof args.audio_url === 'string' && /^https:\/\//i.test(args.audio_url)) payload.audio_url = args.audio_url.trim();
-    else {
-      let audFile = null;
-      const lastMsg = S.msgs.slice().reverse().find(m => m && m.role === 'user' && Array.isArray(m.atts));
-      if (lastMsg){
-        const att = lastMsg.atts.find(a => a && a.file && /^audio\//i.test(a.mime || ''));
-        if (att) audFile = att.file;
-      }
-      if (audFile) payload.audio_base64 = await blobToBase64Raw(audFile);
+
+  if (task === 'vocal_to_music' || task === 'music_cover'){
+    let audFile = null;
+    const lastMsg = S.msgs.slice().reverse().find(m => m && m.role === 'user' && Array.isArray(m.atts));
+    if (lastMsg){
+      const att = lastMsg.atts.find(a => a && a.file && /^audio\//i.test(a.mime || ''));
+      if (att) audFile = att.file;
+    }
+    if (audFile){
+      const rawB64 = await blobToBase64Raw(audFile);
+      if (task === 'vocal_to_music') payload.vocal_audio = rawB64;
+      else payload.song_audio = rawB64;
+      if (cleanLyrics) payload.lyrics = cleanLyrics;
+    } else {
+      task = 'text_to_music';
+      payload.task = 'text_to_music';
     }
   }
-  phase(1);
-  const sub = await postStepAudioJson('/v1/audio/music/submit', payload, 50000);
-  let audioOut = findMediaUrl(sub, 'audio');
-  const taskId = String(sub.task_id || sub.taskId || sub.id || (sub.data && (sub.data.task_id || sub.data.id)) || '').trim();
-  if (!audioOut && !taskId){
-    throw new Error((sub && (sub.error || sub.message || sub.detail)) || 'لم يُرجع StepAudio-3-Music معرّف مهمة صالحاً.');
+  if (task === 'text_to_music'){
+    if (instrumental) payload.instrumental = true;
+    else if (cleanLyrics) payload.lyrics = cleanLyrics;
   }
-  if (!audioOut && taskId){
+
+  phase(1);
+  const sub = await postStepAudioJson('/v1/audio/music/submit', payload, 240000);
+  let blob = null, audioOut = '';
+  if (typeof sub.audio === 'string' && sub.audio.length > 100 && !/^https?:\/\//i.test(sub.audio)){
+    blob = await base64AudioToBlob(sub.audio, sub.response_format || 'mp3');
+  } else {
+    audioOut = findMediaUrl(sub, 'audio');
+  }
+  const taskId = String(sub.task_id || sub.taskId || sub.id || (sub.data && (sub.data.task_id || sub.data.id)) || '').trim();
+  if (!blob && !audioOut && !taskId){
+    throw new Error(formatStepAudioErr(sub, 0) || 'لم يُرجع StepAudio-3-Music معرّف مهمة صالحاً.');
+  }
+  let rewrittenLyrics = typeof sub.rewritten_lyrics === 'string' ? sub.rewritten_lyrics : '';
+  if (!blob && !audioOut && taskId){
     phase(2);
     const t0 = Date.now();
-    while (!audioOut && Date.now() - t0 < 270000 && !ai.stopLoop){
-      await sleep(4000);
-      const qj = await postStepAudioJson('/v1/audio/music/query', {task_id: taskId}, 35000);
-      const st = String(qj.status || qj.state || (qj.data && (qj.data.status || qj.data.state)) || '').toLowerCase();
-      if (['failed', 'error', 'cancelled', 'canceled'].includes(st)){
-        throw new Error(String(qj.error || qj.message || (qj.data && (qj.data.error || qj.data.message)) || 'فشل تأليف الموسيقى في StepAudio-3-Music'));
+    while (!blob && !audioOut && Date.now() - t0 < 480000 && !ai.stopLoop){
+      const elapsed = Date.now() - t0;
+      await sleep(elapsed >= 180000 ? 10000 : elapsed >= 60000 ? 6000 : 3000);
+      const qj = await postStepAudioJson('/v1/audio/music/query', {task_id: taskId}, 45000);
+      const st = String(qj.status || qj.state || (qj.data && (qj.data.status || qj.data.state)) || '').toUpperCase();
+      if (['FAILED', 'ERROR', 'CANCELLED', 'CANCELED'].includes(st)){
+        throw new Error(formatStepAudioErr(qj, 0));
+      }
+      if (typeof qj.rewritten_lyrics === 'string' && qj.rewritten_lyrics) rewrittenLyrics = qj.rewritten_lyrics;
+      const b64 = (typeof qj.audio === 'string' && qj.audio) ? qj.audio : (qj.data && typeof qj.data.audio === 'string' ? qj.data.audio : '');
+      if ((st === 'SUCCESS' || st === 'COMPLETED' || b64.length > 256) && b64 && !/^https?:\/\//i.test(b64)){
+        blob = await base64AudioToBlob(b64, qj.response_format || 'mp3');
+        break;
       }
       audioOut = findMediaUrl(qj, 'audio');
     }
   }
-  if (!audioOut) throw new Error('انتهت مهلة انتظار توليد الموسيقى — أعد المحاولة.');
+  if (!blob && !audioOut) throw new Error('انتهت مهلة انتظار توليد الموسيقى — أعد المحاولة.');
   phase(3);
-  if (/^http:\/\//i.test(audioOut)) audioOut = audioOut.replace(/^http:/i, 'https:');
-  let blob = null, finalUrl = audioOut;
-  try {
-    const ar = await fetchTimeout(audioOut, null, 45000);
-    if (ar.ok){
-      const ab = await ar.blob();
-      if (ab && ab.size > 256){
-        blob = ab.type && /^audio\//i.test(ab.type) ? ab : new Blob([ab], {type: 'audio/mpeg'});
-        finalUrl = URL.createObjectURL(blob);
+  let finalUrl = '';
+  if (blob && blob.size > 256){
+    finalUrl = URL.createObjectURL(blob);
+  } else if (audioOut){
+    if (/^http:\/\//i.test(audioOut)) audioOut = audioOut.replace(/^http:/i, 'https:');
+    finalUrl = audioOut;
+    try {
+      const ar = await fetchTimeout(audioOut, null, 45000);
+      if (ar.ok){
+        const ab = await ar.blob();
+        if (ab && ab.size > 256){
+          blob = ab.type && /^audio\//i.test(ab.type) ? ab : new Blob([ab], {type: 'audio/mpeg'});
+          finalUrl = URL.createObjectURL(blob);
+        }
       }
-    }
-  } catch(e){}
-  return {url: finalUrl, remoteUrl: audioOut, blob: blob, special: 'audio', title: title, caption: caption, request_id: taskId, prompt: caption};
+    } catch(e){}
+  }
+  const out = {url: finalUrl, remoteUrl: audioOut || undefined, blob: blob, special: 'audio', title: title, caption: caption, request_id: taskId, prompt: caption};
+  if (rewrittenLyrics) out.rewritten_lyrics = rewrittenLyrics;
+  return out;
 }
 async function runMedia(name, args, phase){
   phase = phase || (() => {});
@@ -7138,9 +7202,23 @@ saveHistory=function(){
   clearTimeout(atlasSaveTimer);renderSync('saving');
   atlasSaveTimer=setTimeout(async()=>{try{const sessions=packSessions(60000);const r=await api('/api/history/save',{method:'POST',body:JSON.stringify({sessions})});if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.detail||('HTTP '+r.status));}renderSync('saved');}catch(e){renderSync(e.message==='auth'?'local':'error');if(e.message!=='auth')toast(T().errNet||'فشل حفظ المحادثات',true);}},700);
 };
+let atlasKnownCloudMediaLoaded = false;
+const atlasKnownCloudMediaIds = new Set();
+const atlasMissingCloudMediaIds = new Set();
+
 loadHistory=async function(){
-  if(!S.token){let rows=lsGet('g3_guest_sessions',null);if(!Array.isArray(rows))rows=lsGet('g3_sessions',[]);S.sessions=Array.isArray(rows)?rows.slice(-40):[];renderSync('local');renderSessions();renderGallery();refreshStats();return;}
-  try{const j=await apiJ('/api/history');S.sessions=(Array.isArray(j.sessions)?j.sessions:[]).slice(-40);if(!Number.isInteger(S.cur)||S.cur < -1||S.cur >= S.sessions.length)S.cur=-1;renderSync('saved');renderSessions();renderGallery();refreshStats();}
+  if(!S.token){atlasKnownCloudMediaLoaded=false;atlasKnownCloudMediaIds.clear();let rows=lsGet('g3_guest_sessions',null);if(!Array.isArray(rows))rows=lsGet('g3_sessions',[]);S.sessions=Array.isArray(rows)?rows.slice(-40):[];renderSync('local');renderSessions();renderGallery();refreshStats();return;}
+  try{
+    const j=await apiJ('/api/history');
+    if(Array.isArray(j.media_ids)){
+      atlasKnownCloudMediaIds.clear();
+      for(const mid of j.media_ids){if(typeof mid==='string'&&mid)atlasKnownCloudMediaIds.add(mid);}
+      atlasKnownCloudMediaLoaded=true;
+    }
+    S.sessions=(Array.isArray(j.sessions)?j.sessions:[]).slice(-40);
+    if(!Number.isInteger(S.cur)||S.cur < -1||S.cur >= S.sessions.length)S.cur=-1;
+    renderSync('saved');renderSessions();renderGallery();refreshStats();
+  }
   catch(e){S.sessions=[];renderSessions();renderGallery();renderSync(e.message==='auth'?'local':'error');}
 };
 maybeAutoTitle=async function(index){
@@ -7207,7 +7285,7 @@ buildSystem=function(){return buildSystemBase()+'\n\n'+atlasPersonalizationPromp
 
   syncMediaBlobHook = async function(aid, blob, meta){
     if (!S.token || !aid || !(blob instanceof Blob) || !blob.size || blob.size > 25165824) return null;
-    if (syncedCloudMediaIds.has(aid)) return null;
+    if (syncedCloudMediaIds.has(aid) || atlasKnownCloudMediaIds.has(aid)) return null;
     meta = meta || {};
     const qs = new URLSearchParams({
       id: String(aid),
@@ -7228,6 +7306,8 @@ buildSystem=function(){return buildSystemBase()+'\n\n'+atlasPersonalizationPromp
       });
       if (r.ok){
         syncedCloudMediaIds.add(aid);
+        atlasKnownCloudMediaIds.add(aid);
+        atlasMissingCloudMediaIds.delete(aid);
         return await r.json().catch(() => null);
       }
     } catch(e){}
@@ -7236,7 +7316,7 @@ buildSystem=function(){return buildSystemBase()+'\n\n'+atlasPersonalizationPromp
 
   syncMediaUrlHook = async function(aid, url, meta){
     if (!S.token || !aid || !/^https:\/\//i.test(String(url || ''))) return null;
-    if (syncedCloudMediaIds.has(aid)) return null;
+    if (syncedCloudMediaIds.has(aid) || atlasKnownCloudMediaIds.has(aid)) return null;
     meta = meta || {};
     try {
       const res = await apiJ('/api/media/store-url', {
@@ -7249,13 +7329,18 @@ buildSystem=function(){return buildSystemBase()+'\n\n'+atlasPersonalizationPromp
           mime: String(meta.mime || '')
         })
       });
-      if (res && res.ok) syncedCloudMediaIds.add(aid);
+      if (res && res.ok){
+        syncedCloudMediaIds.add(aid);
+        atlasKnownCloudMediaIds.add(aid);
+        atlasMissingCloudMediaIds.delete(aid);
+      }
       return res;
     } catch(e){ return null; }
   };
 
   touchMediaDbHook = function(aid){
     if (!S.token || !aid) return;
+    if (atlasKnownCloudMediaLoaded && !atlasKnownCloudMediaIds.has(aid) && !syncedCloudMediaIds.has(aid)) return;
     const now = Date.now(), last = recentTouchAt.get(aid) || 0;
     if (now - last < 15 * 60 * 1000) return;
     recentTouchAt.set(aid, now);
@@ -7271,24 +7356,48 @@ buildSystem=function(){return buildSystemBase()+'\n\n'+atlasPersonalizationPromp
 
   deleteMediaDbHook = async function(ids){
     if (!S.token || !Array.isArray(ids) || !ids.length) return;
-    for (const id of ids) syncedCloudMediaIds.delete(id);
+    for (const id of ids){
+      syncedCloudMediaIds.delete(id);
+      atlasKnownCloudMediaIds.delete(id);
+      atlasMissingCloudMediaIds.add(id);
+    }
     try { await api('/api/media/delete', {method: 'POST', body: JSON.stringify({ids: ids.slice(0, 200)})}); } catch(e){}
   };
 
+  const inflightMediaFetches = new Map();
   fetchMediaDbHook = async function(aid){
-    if (!aid) return null;
-    try {
-      const r = await fetch('/api/media/' + encodeURIComponent(String(aid)), {credentials: 'include', cache: 'no-store'});
-      if (r.status === 410){
-        markAssetExpiredEverywhere(aid);
-        return {expired: true};
-      }
-      if (!r.ok) return null;
-      const blob = await r.blob();
-      if (!blob || !blob.size) return null;
-      syncedCloudMediaIds.add(aid);
-      return {blob: blob, mime: r.headers.get('content-type') || blob.type || 'application/octet-stream'};
-    } catch(e){ return null; }
+    if (!aid || !S.token) return null;
+    if (atlasMissingCloudMediaIds.has(aid)) return null;
+    if (atlasKnownCloudMediaLoaded && !atlasKnownCloudMediaIds.has(aid) && !syncedCloudMediaIds.has(aid)){
+      atlasMissingCloudMediaIds.add(aid);
+      return null;
+    }
+    if (inflightMediaFetches.has(aid)) return inflightMediaFetches.get(aid);
+    const p = (async () => {
+      try {
+        const r = await fetch('/api/media/' + encodeURIComponent(String(aid)), {credentials: 'include', cache: 'no-store'});
+        if (r.status === 410){
+          atlasKnownCloudMediaIds.delete(aid);
+          atlasMissingCloudMediaIds.add(aid);
+          markAssetExpiredEverywhere(aid);
+          return {expired: true};
+        }
+        if (r.status === 404){
+          atlasKnownCloudMediaIds.delete(aid);
+          atlasMissingCloudMediaIds.add(aid);
+          return null;
+        }
+        if (!r.ok) return null;
+        const blob = await r.blob();
+        if (!blob || !blob.size) return null;
+        syncedCloudMediaIds.add(aid);
+        atlasKnownCloudMediaIds.add(aid);
+        return {blob: blob, mime: r.headers.get('content-type') || blob.type || 'application/octet-stream'};
+      } catch(e){ return null; }
+      finally { inflightMediaFetches.delete(aid); }
+    })();
+    inflightMediaFetches.set(aid, p);
+    return p;
   };
 
   window.syncPendingSessionMedia = async function(){
@@ -8064,25 +8173,24 @@ function syncPendingSessionMedia(){ if (typeof window.syncPendingSessionMedia ==
       const b = addBubble('assistant', finalSpoken);
       saveHistory(); renderSessions();
 
-      // Synthesize & stream chunks via openbmb/VoxCPM-Demo
+      // Synthesize & stream chunks sequentially via openbmb/VoxCPM-Demo
+      // (VoxCPM enforces MAX_CONCURRENT_GENERATIONS_PER_SESSION=1, so chunk i+1 starts
+      //  synthesizing only AFTER chunk i finishes, pipelining behind audio playback.)
       const ttsCtl = new AbortController();
       voiceState.ttsCtl = ttsCtl;
       const chunks = splitSpokenChunks(finalSpoken);
-      const synthPromises = chunks.map((ch, idx) =>
-        idx === 0
-          ? synthesizeVoxCPM(ch, chosenVoice, chosenLang, ttsCtl.signal)
-          : null
-      );
+      const synthPromises = new Array(chunks.length).fill(null);
+      if (chunks.length) synthPromises[0] = synthesizeVoxCPM(chunks[0], chosenVoice, chosenLang, ttsCtl.signal);
 
       let firstVoiceBlob = null;
       for (let i = 0; i < chunks.length; i++){
         if (ttsCtl.signal.aborted || !voiceState.open) break;
         if (!synthPromises[i]) synthPromises[i] = synthesizeVoxCPM(chunks[i], chosenVoice, chosenLang, ttsCtl.signal);
+        const blob = await synthPromises[i];
+        if (ttsCtl.signal.aborted || !voiceState.open) break;
         if (i + 1 < chunks.length && !synthPromises[i + 1]){
           synthPromises[i + 1] = synthesizeVoxCPM(chunks[i + 1], chosenVoice, chosenLang, ttsCtl.signal).catch(() => null);
         }
-        const blob = await synthPromises[i];
-        if (ttsCtl.signal.aborted || !voiceState.open) break;
         if (blob && blob.size > 200){
           if (!firstVoiceBlob) firstVoiceBlob = blob;
           setVoiceMode('speaking');
@@ -8094,7 +8202,7 @@ function syncPendingSessionMedia(){ if (typeof window.syncPendingSessionMedia ==
       if (firstVoiceBlob){
         const aid = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         const vTitle = T().tVoiceCall + ' — Genisi';
-        mediaPut(aid, firstVoiceBlob, {kind: 'audio', title: vTitle});
+        mediaPut({id: aid, kind: 'audio', mime: firstVoiceBlob.type || 'audio/wav', blob: firstVoiceBlob, title: vTitle});
         if (syncMediaBlobHook) syncMediaBlobHook(aid, firstVoiceBlob, {kind: 'audio', name: 'genisi-voice.wav', mime: firstVoiceBlob.type || 'audio/wav'});
         aiMsg.media.push({id: aid, kind: 'audio', url: '/api/media/' + aid, title: vTitle});
         if (b){
