@@ -467,16 +467,21 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
         self.assertNotIn("addBubble('assistant'", html)
 
         # 3) Universal phone screen compatibility (320px -> 760px, safe areas, 100dvh, landscape, 16px mobile inputs)
+        #    AND desktop zoom safety (100dvh/100vw on .view MUST stay strictly inside @media (max-width:760px))
         self.assertIn("100dvh", html)
         self.assertIn("env(safe-area-inset-top", html)
         self.assertIn("env(safe-area-inset-bottom", html)
         self.assertIn("@media (max-width:430px)", html)
         self.assertIn("@media (max-width:360px)", html)
-        self.assertIn("@media (max-height:560px)", html)
+        self.assertIn("@media (max-height:560px) and (max-width:760px)", html)
         self.assertIn("font-size:16px !important", html)
+        style_only = html.split("<style>", 1)[1].split("</style>", 1)[0]
+        before_mobile_block = style_only.split("@media (max-width:760px){", 1)[0]
+        self.assertNotIn("height:100dvh", before_mobile_block)
 
     def test_python_model_gateways_and_cors_headers(self) -> None:
         fake_png = b"\x89PNG\r\n\x1a\nfakepngbytes" * 80
+        fake_mp4 = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom" + (b"videodata" * 120)
 
         class _FakeModelsAsyncClient:
             def __init__(self, *args, **kwargs):
@@ -494,11 +499,28 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             async def get(self, url, **kwargs):
                 params = kwargs.get("params") or {}
                 if url.endswith("/info"):
-                    return httpx.Response(200, json={"named_endpoints": {"/chat_predict": {"parameters": []}}})
+                    return httpx.Response(
+                        200,
+                        json={
+                            "named_endpoints": {
+                                "/chat_predict": {"parameters": []},
+                                "/text_to_video": {
+                                    "parameters": [
+                                        {"parameter_name": "prompt", "parameter_default": ""},
+                                        {"parameter_name": "negative_prompt", "parameter_default": ""},
+                                        {"parameter_name": "height_ui", "parameter_default": 512},
+                                        {"parameter_name": "width_ui", "parameter_default": 896},
+                                        {"parameter_name": "mode", "parameter_default": "text-to-video"},
+                                        {"parameter_name": "duration_ui", "parameter_default": 3.5},
+                                    ]
+                                },
+                            }
+                        },
+                    )
+                if "/file=" in url or url.endswith(".mp4"):
+                    return httpx.Response(200, content=fake_mp4, headers={"content-type": "video/mp4"})
                 if "/ai/aiappgen" in url or "/ai/nano-banana" in url:
                     return httpx.Response(200, content=fake_png, headers={"content-type": "image/png"})
-                if params.get("action") == "generate":
-                    return httpx.Response(200, json={"task_id": "vid-task-1", "status": "PROCESSING"})
                 if params.get("action") == "status":
                     return httpx.Response(200, json={"status": "SUCCEEDED", "video_url": "https://cdn.example.com/out.mp4"})
                 if "html.duckduckgo.com" in url:
@@ -512,9 +534,13 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             async def post(self, url, **kwargs):
                 if "/call/chat_predict" in url:
                     return httpx.Response(200, json={"event_id": "evt-qwen-1"})
+                if "/call/text_to_video" in url:
+                    return httpx.Response(200, json={"event_id": "evt-vid-1"})
                 return httpx.Response(404, text="not found")
 
             def stream(self, method, url, **kwargs):
+                is_vid = "/call/text_to_video/" in url
+
                 class _FakeStream:
                     status_code = 200
 
@@ -525,9 +551,14 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
                         return False
 
                     async def aiter_lines(self_inner):
-                        yield "event: complete"
-                        yield 'data: [null, null, null, null, [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "مرحباً من بايثون مباشرة"}]]'
-                        yield ""
+                        if is_vid:
+                            yield "event: complete"
+                            yield 'data: [{"video": {"path": "/tmp/gradio/out.mp4"}}, 42]'
+                            yield ""
+                        else:
+                            yield "event: complete"
+                            yield 'data: [null, null, null, null, [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "مرحباً من بايثون مباشرة"}]]'
+                            yield ""
 
                     async def aiter_bytes(self_inner):
                         yield (
@@ -582,22 +613,39 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             self.assertEqual(r_img.status_code, 200)
             self.assertEqual(r_img.content, fake_png)
 
-            # 5) Video submit & status via Python (zero AnesKAM proxy)
+            # 5) Async Video submit, status polling, and Range-capable MP4 streaming via Python (zero 502 timeouts)
             r_vid_sub = self.client.post(
                 "/api/models/video/submit",
                 headers={"Origin": "https://mobile-client.example.org"},
-                json={"prompt": "ocean waves", "resolution": "720P", "duration": 5, "enable_audio": True},
+                json={"prompt": "brave rabbit on mossy oak branch", "ratio": "16:9", "sound": True},
             )
             self.assertEqual(r_vid_sub.status_code, 200)
-            self.assertEqual(r_vid_sub.json()["task_id"], "vid-task-1")
+            vid_tid = r_vid_sub.json()["task_id"]
+            self.assertTrue(vid_tid.startswith("vid_"))
 
-            r_vid_st = self.client.post(
-                "/api/models/video/status",
-                headers={"Origin": "https://mobile-client.example.org"},
-                json={"task_id": "vid-task-1"},
-            )
-            self.assertEqual(r_vid_st.status_code, 200)
-            self.assertEqual(r_vid_st.json()["status"], "SUCCEEDED")
+            vid_done = None
+            for _ in range(30):
+                r_vid_st = self.client.post(
+                    "/api/models/video/status",
+                    headers={"Origin": "https://mobile-client.example.org"},
+                    json={"task_id": vid_tid},
+                )
+                self.assertEqual(r_vid_st.status_code, 200)
+                if r_vid_st.json().get("status") == "SUCCEEDED":
+                    vid_done = r_vid_st.json()
+                    break
+                time.sleep(0.05)
+            self.assertIsNotNone(vid_done, "Background video task did not reach SUCCEEDED")
+            self.assertEqual(vid_done["video_url"], f"/api/models/video/file/{vid_tid}")
+
+            r_mp4_full = self.client.get(vid_done["video_url"])
+            self.assertEqual(r_mp4_full.status_code, 200)
+            self.assertEqual(r_mp4_full.content, fake_mp4)
+            self.assertIn("video/mp4", r_mp4_full.headers.get("content-type", ""))
+
+            r_mp4_range = self.client.get(vid_done["video_url"], headers={"Range": "bytes=0-31"})
+            self.assertEqual(r_mp4_range.status_code, 206)
+            self.assertEqual(r_mp4_range.content, fake_mp4[:32])
 
             # 6) Web search & SSRF-guarded read-url via Python
             r_ws = self.client.post(

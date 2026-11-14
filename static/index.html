@@ -1193,20 +1193,10 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
 /* ═══════════════════════════════════════════════════════════════════════════
    Universal Phone & Small-Screen Compatibility (320px → 760px, iOS/Android,
    Safe-Area Notches, Dynamic Viewport 100dvh, Landscape Phones, Touch UX)
+   NOTE: Never apply vw/vh/dvh to full-screen containers outside max-width:760px,
+   because desktop uses html{zoom:var(--ui-zoom)} (.78) where 100vw/100dvh shrink
+   containers to 78% of the zoomed desktop viewport.
    ═══════════════════════════════════════════════════════════════════════════ */
-html, body{
-  width:100%;
-  max-width:100vw;
-  overflow-x:hidden;
-  height:100%;
-  height:100dvh;
-}
-.view{
-  height:100%;
-  height:100dvh;
-  max-width:100vw;
-  overflow-x:hidden;
-}
 /* Speaking mode always clears the fixed #topbar and safe-area insets on every screen */
 .voice-shell{
   padding-top:calc(62px + env(safe-area-inset-top, 0px));
@@ -1220,13 +1210,26 @@ html, body{
   overflow-x:auto;
   -webkit-overflow-scrolling:touch;
 }
-.pop{
-  max-width:calc(100vw - 20px);
-}
 @media (hover:none){
   .mactions{opacity:.85}
 }
 @media (max-width:760px){
+  html, body{
+    width:100%;
+    max-width:100vw;
+    overflow-x:hidden;
+    height:100%;
+    height:100dvh;
+  }
+  .view{
+    height:100%;
+    height:100dvh;
+    max-width:100vw;
+    overflow-x:hidden;
+  }
+  .pop{
+    max-width:calc(100vw - 20px);
+  }
   #topbar{
     top:0;
     height:calc(52px + env(safe-area-inset-top, 0px));
@@ -1374,8 +1377,8 @@ html, body{
   .voice-orb-wrap{width:92px; height:92px}
   .voice-orb-core{width:68px; height:68px}
 }
-/* Landscape phone viewport (short height) */
-@media (max-height:560px) and (max-width:920px){
+/* Landscape phone viewport (short height, strictly ≤760px where zoom is 1) */
+@media (max-height:560px) and (max-width:760px){
   #hello{padding-top:calc(46px + env(safe-area-inset-top, 0px))}
   #headline{font-size:20px; margin-bottom:10px}
   #sugList{flex-direction:row; flex-wrap:wrap; gap:6px; margin-top:8px}
@@ -5515,43 +5518,68 @@ async function runMedia(name, args, phase){
     const r = await pythonImageRequest('/api/models/image/edit', editPayload);
     phase(3); return {url: r.url, blob: r.blob, special: 'image', request_id: '', prompt};
   }
-  /* ---- فيديو عبر خادم البايثون مباشرة (بدون أي بروكسي) ---- */
+  /* ---- فيديو عبر خادم البايثون مباشرة (طابور غير متزامن + بث MP4 محلي بدون بروكسي وبدون خطأ 502) ---- */
   const ratio = ['auto', '1:1', '16:9', '9:16', '4:3', '3:4'].includes(String(args.ratio)) ? String(args.ratio) : 'auto';
   const pr = await fetchTimeout('/api/models/video/submit', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     credentials: 'same-origin',
     body: JSON.stringify({prompt: prompt, ratio: ratio, sound: args.sound !== false})
-  }, 245000);
+  }, 45000);
   const text = await pr.text();
   let j = null; try { j = JSON.parse(text); } catch(e){}
-  if (!pr.ok || (j && (j.status === false || (j.statusCode && Number(j.statusCode) !== 200))))
+  if (!pr.ok || (j && (j.status === false || j.ok === false || (j.statusCode && Number(j.statusCode) !== 200))))
     throw new Error((j && (j.detail || j.message || j.error)) || ('HTTP ' + pr.status));
-  let out = j ? findMediaUrl(j, 'video') : ((text.match(/https?:\/\/[^\s"'<>]+/) || [''])[0]);
+  const pickVideoOut = obj => {
+    if (!obj || typeof obj !== 'object') return '';
+    const direct = obj.video_url || obj.videoUrl || (obj.data && (obj.data.video_url || obj.data.videoUrl)) || '';
+    if (typeof direct === 'string' && (/^\/api\/models\/video\/file\//i.test(direct.trim()) || /^https?:\/\//i.test(direct.trim())))
+      return direct.trim();
+    return findMediaUrl(obj, 'video');
+  };
+  let out = j ? pickVideoOut(j) : ((text.match(/https?:\/\/[^\s"'<>]+/) || [''])[0]);
   const rid = j && (j.request_id || j.task_id || j.taskId || j.id || (j.data && (j.data.task_id || j.data.id)));
   if (!out && rid){
     phase(2);
     const t0 = Date.now();
-    while (!out && Date.now() - t0 < 240000 && !ai.stopLoop){
-      await sleep(5000);
+    while (!out && Date.now() - t0 < 300000 && !ai.stopLoop){
+      await sleep(3500);
+      let fatalErr = null;
       try {
         const sr = await fetchTimeout('/api/models/video/status', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           credentials: 'same-origin',
           body: JSON.stringify({task_id: String(rid)})
-        }, 35000);
+        }, 30000);
         let sj = null; try { sj = JSON.parse(await sr.text()); } catch(e){}
-        if (sj && (sj.status === 'failed' || sj.status === 'error')) throw new Error(sj.detail || sj.message || 'فشل توليد الفيديو');
-        out = sj ? findMediaUrl(sj, 'video') : '';
-      } catch(e){ if (/فشل/.test(e.message)) throw e; }
+        const stLow = String((sj && sj.status) || '').toLowerCase();
+        if (sj && (stLow === 'failed' || stLow === 'error' || sj.ok === false)){
+          fatalErr = new Error(sj.detail || sj.message || sj.error || 'فشل توليد الفيديو');
+        } else if (sj){
+          out = pickVideoOut(sj);
+        }
+      } catch(e){}
+      if (fatalErr) throw fatalErr;
     }
   }
+  if (!out && ai.stopLoop) throw new Error(T().stopped);
   if (out) phase(3);
   if (out && /^http:\/\//i.test(out)) out = out.replace(/^http:/i, 'https:');
-  if (!out || !/^https:\/\//i.test(out))
-    throw new Error('لم تُرجع الخدمة رابط فيديو صالحاً. الرد: ' + String(text).slice(0, 240));
-  return {url: out, special: 'video', request_id: rid || '', ratio: args.ratio, prompt};
+  if (!out || !(/^(?:https:\/\/|\/api\/models\/video\/file\/)/i.test(out)))
+    throw new Error('انتهت مهلة انتظار توليد الفيديو أو لم تُرجع الخدمة ملف فيديو صالحاً.');
+  let vidBlob = null, finalVidUrl = out;
+  try {
+    const vr = await fetchTimeout(out, /^\/api\//i.test(out) ? {credentials: 'same-origin'} : null, 90000);
+    if (vr.ok){
+      const vb = await vr.blob();
+      if (vb && vb.size > 512){
+        vidBlob = vb.type && /^video\//i.test(vb.type) ? vb : new Blob([vb], {type: 'video/mp4'});
+        finalVidUrl = URL.createObjectURL(vidBlob);
+      }
+    }
+  } catch(e){}
+  return {url: finalVidUrl, remoteUrl: /^https:\/\//i.test(out) ? out : undefined, blob: vidBlob, special: 'video', request_id: rid || '', ratio: args.ratio, prompt};
 }
 async function mediaRunUI(call){
   const name = call.name, args = call.args || {};
