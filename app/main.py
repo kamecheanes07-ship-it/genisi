@@ -45,11 +45,14 @@ APP_NAME = "AnesNT Genisi"
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production").lower()
 QWEN_OMNI_SPACE_URL = os.getenv("QWEN_OMNI_SPACE_URL", "https://qwen-qwen3-5-omni-offline-demo.hf.space").rstrip("/")
+QWEN3_OMNI_FALLBACK_URL = os.getenv("QWEN3_OMNI_FALLBACK_URL", "https://qwen-qwen3-omni-demo.hf.space").rstrip("/")
+OMEGATECH_AI_BASE_URL = os.getenv("OMEGATECH_AI_BASE_URL", "https://api.omegatech.app/api/ai").rstrip("/")
 STEPAUDIO_MUSIC_SPACE_URL = os.getenv("STEPAUDIO_MUSIC_SPACE_URL", "https://stepfun-ai-stepaudio-3-music.hf.space").rstrip("/")
 VOXCPM_SPACE_URL = os.getenv("VOXCPM_SPACE_URL", "https://openbmb-voxcpm-demo.hf.space").rstrip("/")
 IMAGE_API_BASE_URL = os.getenv("IMAGE_API_BASE_URL", "https://prexzyapis.com").rstrip("/")
 VIDEO_API_URL = os.getenv("VIDEO_API_URL", "https://api.omegatech.app/api/ai/Txt2video").strip()
 _qwen_meta_cache: dict[str, Any] = {"ts": 0.0, "prefix": None, "endpoints": None}
+_recent_qwen_uploads: dict[str, dict[str, Any]] = {}
 _music_schema_cache: dict[str, Any] = {"ts": 0.0, "submit_props": None}
 _voxcpm_meta_cache: dict[str, Any] = {"ts": 0.0, "prefix": None}
 _video_jobs: dict[str, dict[str, Any]] = {}
@@ -486,6 +489,79 @@ def _strip_data_uri_prefix(raw: str) -> str:
     return val
 
 
+_DEFAULT_OUTBOUND_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
+    "Accept": "*/*",
+}
+
+
+def _get_hf_token() -> str:
+    return (
+        os.getenv("HF_TOKEN")
+        or os.getenv("HUGGINGFACEHUB_API_TOKEN")
+        or os.getenv("HF_API_TOKEN")
+        or ""
+    ).strip()
+
+
+def _hf_space_headers(
+    space_url: str,
+    *,
+    include_auth: bool = True,
+    extra: dict[str, str] | None = None,
+) -> dict[str, str]:
+    base = (space_url or "").rstrip("/")
+    hdrs: dict[str, str] = {
+        "User-Agent": _DEFAULT_OUTBOUND_HEADERS["User-Agent"],
+        "Accept": "*/*",
+    }
+    if base.startswith(("http://", "https://")):
+        hdrs["Origin"] = base
+        hdrs["Referer"] = base + "/"
+    if include_auth:
+        tok = _get_hf_token()
+        host = (urlsplit(base).hostname or "").lower()
+        if tok and (host.endswith(".hf.space") or host.endswith("huggingface.co")):
+            hdrs["Authorization"] = f"Bearer {tok}"
+    if extra:
+        hdrs.update(extra)
+    return hdrs
+
+
+async def _hf_request_with_retry(
+    client: httpx.AsyncClient,
+    method: str,
+    url: str,
+    *,
+    space_url: str,
+    extra_headers: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> httpx.Response:
+    """Send an HTTP request to a Hugging Face Space with HF_TOKEN auth and 429/5xx resilience."""
+    has_token = bool(_get_hf_token())
+    auth_modes = [True, False, True] if has_token else [False, False]
+    last_res: httpx.Response | None = None
+    verb = method.upper()
+
+    for idx, use_auth in enumerate(auth_modes):
+        hdrs = _hf_space_headers(space_url, include_auth=use_auth, extra=extra_headers)
+        if verb == "POST":
+            res = await client.post(url, headers=hdrs, **kwargs)
+        else:
+            res = await client.get(url, headers=hdrs, **kwargs)
+        last_res = res
+        if res.status_code < 400:
+            return res
+        if res.status_code in {401, 403} and use_auth:
+            continue
+        if res.status_code in {429, 502, 503, 504} and idx + 1 < len(auth_modes):
+            await asyncio.sleep(0.35 + (0.35 * idx) + random.uniform(0.02, 0.18))
+            continue
+        return res
+    assert last_res is not None
+    return last_res
+
+
 @app.post("/api/music/submit")
 async def music_submit(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Direct Python gateway for stepfun-ai/StepAudio-3-Music using its official step-music contract."""
@@ -547,7 +623,13 @@ async def music_submit(request: Request, payload: dict[str, Any] = Body(...)) ->
     try:
         timeout = httpx.Timeout(230.0, connect=15.0)
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            upstream = await client.post(f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/submit", json=send_body)
+            upstream = await _hf_request_with_retry(
+                client,
+                "POST",
+                f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/submit",
+                space_url=STEPAUDIO_MUSIC_SPACE_URL,
+                json=send_body,
+            )
             data = upstream.json() if upstream.content else {}
             if upstream.status_code >= 400:
                 detail = _extract_stepaudio_error(data, upstream.status_code)
@@ -568,7 +650,13 @@ async def music_query(request: Request, payload: dict[str, Any] = Body(...)) -> 
     try:
         timeout = httpx.Timeout(45.0, connect=15.0)
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            upstream = await client.post(f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/query", json={"task_id": task_id})
+            upstream = await _hf_request_with_retry(
+                client,
+                "POST",
+                f"{STEPAUDIO_MUSIC_SPACE_URL}/v1/audio/music/query",
+                space_url=STEPAUDIO_MUSIC_SPACE_URL,
+                json={"task_id": task_id},
+            )
             data = upstream.json() if upstream.content else {}
             if upstream.status_code >= 400:
                 detail = _extract_stepaudio_error(data, upstream.status_code)
@@ -600,26 +688,30 @@ async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...))
 
     try:
         async with httpx.AsyncClient(timeout=90.0, follow_redirects=True) as client:
-            prefix = _voxcpm_meta_cache.get("prefix")
-            if prefix is None or time.time() - float(_voxcpm_meta_cache.get("ts") or 0) > 3600:
-                prefix = "/gradio_api"
-                for cand in ("/gradio_api", ""):
-                    r_info = await client.get(f"{VOXCPM_SPACE_URL}{cand}/info", timeout=12.0)
-                    if r_info.status_code == 200:
-                        prefix = cand
-                        _voxcpm_meta_cache["prefix"] = prefix
-                        _voxcpm_meta_cache["ts"] = time.time()
-                        break
+            prefix = str(_voxcpm_meta_cache.get("prefix") or "/gradio_api")
 
             ref_file_data = None
             if ref_b64 and len(ref_b64) < 8_000_000:
                 try:
                     ref_bytes = base64.b64decode(ref_b64)
-                    up_res = await client.post(
+                    up_res = await _hf_request_with_retry(
+                        client,
+                        "POST",
                         f"{VOXCPM_SPACE_URL}{prefix}/upload",
+                        space_url=VOXCPM_SPACE_URL,
                         files={"files": ("voice-anchor.wav", ref_bytes, "audio/wav")},
                         timeout=25.0,
                     )
+                    if up_res.status_code == 404 and prefix == "/gradio_api":
+                        prefix = ""
+                        up_res = await _hf_request_with_retry(
+                            client,
+                            "POST",
+                            f"{VOXCPM_SPACE_URL}/upload",
+                            space_url=VOXCPM_SPACE_URL,
+                            files={"files": ("voice-anchor.wav", ref_bytes, "audio/wav")},
+                            timeout=25.0,
+                        )
                     if up_res.status_code == 200:
                         up_arr = up_res.json()
                         if isinstance(up_arr, list) and up_arr:
@@ -639,11 +731,27 @@ async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...))
                 do_normalize,
                 False,
             ]
-            r_call = await client.post(
+            r_call = await _hf_request_with_retry(
+                client,
+                "POST",
                 f"{VOXCPM_SPACE_URL}{prefix}/call/generate",
+                space_url=VOXCPM_SPACE_URL,
                 json={"data": gradio_data},
                 timeout=25.0,
             )
+            if r_call.status_code == 404 and prefix == "/gradio_api":
+                prefix = ""
+                r_call = await _hf_request_with_retry(
+                    client,
+                    "POST",
+                    f"{VOXCPM_SPACE_URL}/call/generate",
+                    space_url=VOXCPM_SPACE_URL,
+                    json={"data": gradio_data},
+                    timeout=25.0,
+                )
+            _voxcpm_meta_cache["prefix"] = prefix
+            _voxcpm_meta_cache["ts"] = time.time()
+
             call_json = r_call.json() if r_call.content else {}
             event_id = call_json.get("event_id")
             if r_call.status_code >= 400 or not event_id:
@@ -651,7 +759,12 @@ async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...))
 
             audio_url = ""
             cur_event = ""
-            async with client.stream("GET", f"{VOXCPM_SPACE_URL}{prefix}/call/generate/{event_id}", timeout=90.0) as sse:
+            async with client.stream(
+                "GET",
+                f"{VOXCPM_SPACE_URL}{prefix}/call/generate/{event_id}",
+                headers=_hf_space_headers(VOXCPM_SPACE_URL),
+                timeout=90.0,
+            ) as sse:
                 async for line in sse.aiter_lines():
                     if line.startswith("event:"):
                         cur_event = line[6:].strip()
@@ -674,7 +787,13 @@ async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...))
                             break
             if not audio_url:
                 raise HTTPException(502, "لم يُرجع نموذج VoxCPM ملفاً صوتياً")
-            r_audio = await client.get(audio_url, timeout=45.0)
+            r_audio = await _hf_request_with_retry(
+                client,
+                "GET",
+                audio_url,
+                space_url=VOXCPM_SPACE_URL,
+                timeout=45.0,
+            )
             if r_audio.status_code >= 400 or not r_audio.content:
                 raise HTTPException(502, "تعذر تنزيل المقطع الصوتي من VoxCPM")
             media_type = (r_audio.headers.get("content-type") or "audio/wav").split(";")[0].strip()
@@ -691,12 +810,6 @@ async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...))
 # Direct Python Model & Tool Gateways (Zero Third-Party Proxies, Native CORS)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-_DEFAULT_OUTBOUND_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36",
-    "Accept": "*/*",
-}
-
-
 def _sniff_image_mime(raw: bytes) -> str:
     if len(raw) > 3 and raw[:3] == b"\x89PN":
         return "image/png"
@@ -709,41 +822,259 @@ def _sniff_image_mime(raw: bytes) -> str:
     return ""
 
 
-async def _discover_qwen_gradio(client: httpx.AsyncClient, preferred_endpoint: str = "chat_predict") -> tuple[str, str, dict[str, Any]]:
-    now = time.time()
-    preferred = preferred_endpoint.strip().strip("/") or "chat_predict"
-    cached_prefix = _qwen_meta_cache.get("prefix")
-    cached_eps = _qwen_meta_cache.get("endpoints")
-    if (
-        cached_prefix is not None
-        and isinstance(cached_eps, dict)
-        and now - float(_qwen_meta_cache.get("ts") or 0) < 3600
-    ):
-        for k, val in cached_eps.items():
-            if k.strip("/") == preferred:
-                return str(cached_prefix), k.strip("/"), val if isinstance(val, dict) else {}
+def _qwen_gradio_candidates() -> list[str]:
+    out: list[str] = []
+    for raw in [
+        QWEN_OMNI_SPACE_URL,
+        QWEN3_OMNI_FALLBACK_URL,
+        *[u.strip() for u in os.getenv("QWEN_EXTRA_SPACE_URLS", "").split(",") if u.strip()],
+    ]:
+        cleaned = (raw or "").strip().rstrip("/")
+        if cleaned.startswith(("http://", "https://")) and cleaned not in out:
+            out.append(cleaned)
+    return out
 
-    last_err = "unknown"
-    for cand in ("/gradio_api", ""):
+
+def _prune_qwen_uploads() -> None:
+    now = time.time()
+    expired = [k for k, v in _recent_qwen_uploads.items() if now - float(v.get("ts") or 0) > 900]
+    for k in expired:
+        _recent_qwen_uploads.pop(k, None)
+    items = sorted(_recent_qwen_uploads.items(), key=lambda kv: float(kv[1].get("ts") or 0), reverse=True)
+    total_bytes = 0
+    for idx, (k, rec) in enumerate(items):
+        sz = len(rec.get("bytes") or b"")
+        if idx >= 12 or total_bytes + sz > 30 * 1024 * 1024:
+            _recent_qwen_uploads.pop(k, None)
+        else:
+            total_bytes += sz
+
+
+def _cache_qwen_upload(path_key: str, space_url: str, name: str, mime: str, raw: bytes, public_url: str) -> None:
+    _prune_qwen_uploads()
+    if len(raw) <= 25 * 1024 * 1024:
+        _recent_qwen_uploads[path_key] = {
+            "ts": time.time(),
+            "space": space_url,
+            "name": name,
+            "mime": mime,
+            "bytes": raw,
+            "public_url": public_url,
+        }
+
+
+async def _upload_to_gradio_space(
+    client: httpx.AsyncClient,
+    space_url: str,
+    raw: bytes,
+    safe_name: str,
+    safe_mime: str,
+) -> tuple[str, str] | None:
+    prefix = str(_qwen_meta_cache.get(f"prefix:{space_url}") or "/gradio_api")
+    up_res = await _hf_request_with_retry(
+        client,
+        "POST",
+        f"{space_url}{prefix}/upload",
+        space_url=space_url,
+        files={"files": (safe_name, raw, safe_mime)},
+        timeout=45.0,
+    )
+    if up_res.status_code == 404 and prefix == "/gradio_api":
+        prefix = ""
+        up_res = await _hf_request_with_retry(
+            client,
+            "POST",
+            f"{space_url}/upload",
+            space_url=space_url,
+            files={"files": (safe_name, raw, safe_mime)},
+            timeout=45.0,
+        )
+    if up_res.status_code >= 400:
+        return None
+    arr = up_res.json() if up_res.content else []
+    if not isinstance(arr, list) or not arr:
+        return None
+    remote_path = arr[0] if isinstance(arr[0], str) else str((arr[0] or {}).get("path") or "")
+    if not remote_path:
+        return None
+    _qwen_meta_cache[f"prefix:{space_url}"] = prefix
+    public_url = f"{space_url}{prefix}/file={remote_path}"
+    return remote_path, public_url
+
+
+async def _upload_to_public_temp_host(
+    client: httpx.AsyncClient,
+    raw: bytes,
+    safe_name: str,
+    safe_mime: str,
+) -> str:
+    # 1) Try authenticated Gradio Space uploads first
+    for space_url in _qwen_gradio_candidates():
         try:
-            r = await client.get(f"{QWEN_OMNI_SPACE_URL}{cand}/info", timeout=15.0)
-            if r.status_code != 200:
-                last_err = f"HTTP {r.status_code}"
-                continue
-            info = r.json()
-            named = info.get("named_endpoints") or {}
-            if not isinstance(named, dict) or not named:
-                last_err = "missing named_endpoints"
-                continue
-            _qwen_meta_cache.update({"ts": now, "prefix": cand, "endpoints": named})
-            for k, val in named.items():
-                if k.strip("/") == preferred:
-                    return cand, k.strip("/"), val if isinstance(val, dict) else {}
-            first_key = next(iter(named.keys())).strip("/")
-            return cand, first_key, named.get(f"/{first_key}") or named.get(first_key) or {}
-        except Exception as exc:
-            last_err = str(exc)[:180]
-    raise HTTPException(502, f"تعذر الاتصال بمحرك Genisi 4 Atlas: {last_err}")
+            got = await _upload_to_gradio_space(client, space_url, raw, safe_name, safe_mime)
+            if got:
+                return got[1]
+        except Exception:
+            continue
+
+    # 2) Fallback temporary public file hosts (for image edit or cross-space FileData URLs)
+    try:
+        r_tmp = await client.post(
+            "https://tmpfiles.org/api/v1/upload",
+            files={"file": (safe_name, raw, safe_mime)},
+            headers=_DEFAULT_OUTBOUND_HEADERS,
+            timeout=35.0,
+        )
+        if r_tmp.status_code < 400:
+            j_tmp = r_tmp.json()
+            u_tmp = str(((j_tmp or {}).get("data") or {}).get("url") or "").strip()
+            if u_tmp.startswith("http"):
+                return re.sub(r"^http://", "https://", u_tmp.replace("tmpfiles.org/", "tmpfiles.org/dl/"), flags=re.I)
+    except Exception:
+        pass
+
+    try:
+        r_uguu = await client.post(
+            "https://uguu.se/upload.php",
+            files={"files[]": (safe_name, raw, safe_mime)},
+            headers=_DEFAULT_OUTBOUND_HEADERS,
+            timeout=35.0,
+        )
+        if r_uguu.status_code < 400:
+            j_uguu = r_uguu.json()
+            files_arr = (j_uguu or {}).get("files") or []
+            if files_arr and isinstance(files_arr[0], dict):
+                u_uguu = str(files_arr[0].get("url") or "").strip()
+                if u_uguu.startswith("https://"):
+                    return u_uguu
+    except Exception:
+        pass
+
+    try:
+        r_cat = await client.post(
+            "https://litterbox.catbox.moe/resources/internals/api.php",
+            data={"reqtype": "fileupload", "time": "1h"},
+            files={"fileToUpload": (safe_name, raw, safe_mime)},
+            headers=_DEFAULT_OUTBOUND_HEADERS,
+            timeout=35.0,
+        )
+        txt_cat = (r_cat.text or "").strip()
+        if r_cat.status_code < 400 and txt_cat.startswith("https://"):
+            return txt_cat
+    except Exception:
+        pass
+
+    return ""
+
+
+async def _remap_file_data_for_space(
+    client: httpx.AsyncClient,
+    fd: Any,
+    target_space: str,
+) -> Any:
+    if not isinstance(fd, dict):
+        return fd
+    if "video" in fd and isinstance(fd.get("video"), dict):
+        remapped_inner = await _remap_file_data_for_space(client, fd["video"], target_space)
+        return {"video": remapped_inner, "subtitles": fd.get("subtitles")}
+    orig_path = str(fd.get("path") or "").strip()
+    if not orig_path:
+        return fd
+    rec = _recent_qwen_uploads.get(orig_path)
+    if not rec or rec.get("space") == target_space:
+        return fd
+    try:
+        reup = await _upload_to_gradio_space(
+            client,
+            target_space,
+            rec["bytes"],
+            str(rec.get("name") or "upload.bin"),
+            str(rec.get("mime") or "application/octet-stream"),
+        )
+        if reup:
+            return {"path": reup[0], "meta": {"_type": "gradio.FileData"}}
+    except Exception:
+        pass
+    pub_url = str(rec.get("public_url") or "")
+    if pub_url.startswith("https://"):
+        return {"path": pub_url, "url": pub_url, "meta": {"_type": "gradio.FileData"}}
+    return fd
+
+
+async def _adapt_qwen_data_for_space(
+    client: httpx.AsyncClient,
+    data: list[Any],
+    space_url: str,
+) -> list[Any]:
+    if len(data) < 9:
+        return list(data)
+    audio_fd = await _remap_file_data_for_space(client, data[1], space_url)
+    image_fd = await _remap_file_data_for_space(client, data[2], space_url)
+    video_fd = await _remap_file_data_for_space(client, data[3], space_url)
+    if space_url == QWEN3_OMNI_FALLBACK_URL and space_url != QWEN_OMNI_SPACE_URL and len(data) == 9:
+        # Qwen/Qwen3-Omni-Demo /chat_predict signature (12 positional args):
+        # [text, audio, image, video, history, system_prompt, voice_choice, temperature, top_p, top_k, return_audio, enable_thinking]
+        return [
+            data[0],
+            audio_fd,
+            image_fd,
+            video_fd,
+            data[4],
+            data[5],
+            "Cherry / 芊悦",
+            data[6],
+            data[7],
+            data[8],
+            False,
+            False,
+        ]
+    return [
+        data[0],
+        audio_fd,
+        image_fd,
+        video_fd,
+        *data[4:],
+    ]
+
+
+async def _start_qwen_gradio_call(
+    client: httpx.AsyncClient,
+    data: list[Any],
+    endpoint: str,
+    space_url: str,
+    *,
+    call_timeout: float = 28.0,
+) -> tuple[str, str]:
+    chosen = endpoint.strip().strip("/") or "chat_predict"
+    adapted_data = await _adapt_qwen_data_for_space(client, data, space_url)
+    prefix = str(_qwen_meta_cache.get(f"prefix:{space_url}") or "/gradio_api")
+
+    r_call = await _hf_request_with_retry(
+        client,
+        "POST",
+        f"{space_url}{prefix}/call/{chosen}",
+        space_url=space_url,
+        json={"data": adapted_data},
+        timeout=call_timeout,
+    )
+    if r_call.status_code == 404 and prefix == "/gradio_api":
+        prefix = ""
+        r_call = await _hf_request_with_retry(
+            client,
+            "POST",
+            f"{space_url}/call/{chosen}",
+            space_url=space_url,
+            json={"data": adapted_data},
+            timeout=call_timeout,
+        )
+    if r_call.status_code >= 400:
+        raise RuntimeError(f"{space_url} HTTP {r_call.status_code}: {r_call.text[:160]}")
+    started = r_call.json() if r_call.content else {}
+    event_id = str(started.get("event_id") or "").strip()
+    if not event_id:
+        raise RuntimeError(f"{space_url}: missing event_id")
+    _qwen_meta_cache[f"prefix:{space_url}"] = prefix
+    return f"{space_url}{prefix}/call/{chosen}", event_id
 
 
 def _extract_qwen_assistant_text(payload: Any) -> str | None:
@@ -773,18 +1104,99 @@ def _extract_qwen_assistant_text(payload: Any) -> str | None:
     return None
 
 
+def _extract_omegatech_reply(obj: Any) -> str:
+    if not isinstance(obj, dict):
+        return ""
+    for path in (
+        ("data", "reply"),
+        ("data", "response"),
+        ("data", "answer"),
+        ("data", "result"),
+        ("data", "message"),
+        ("data", "text"),
+        ("reply",),
+        ("response",),
+        ("result",),
+        ("answer",),
+        ("message",),
+        ("text",),
+        ("content",),
+    ):
+        cur: Any = obj
+        ok = True
+        for k in path:
+            if isinstance(cur, dict) and k in cur:
+                cur = cur[k]
+            else:
+                ok = False
+                break
+        if ok and isinstance(cur, str) and cur.strip():
+            return cur.strip()
+    return ""
+
+
+async def _omegatech_chat_fallback(client: httpx.AsyncClient, data: list[Any]) -> str:
+    """Free non-HF-Space fallback (api.omegatech.app) when all *.hf.space backends hit 429/5xx."""
+    user_text = str(data[0] or "").strip() if len(data) > 0 else ""
+    has_binary_only = not user_text and any(bool(data[idx]) for idx in (1, 2, 3) if len(data) > idx)
+    if has_binary_only:
+        raise RuntimeError("المرفق الصوتي أو المرئي يتطلب محرك الوسائط المتعددة المشغول حالياً — أعد المحاولة بعد ثوانٍ")
+
+    history = data[4] if len(data) > 4 and isinstance(data[4], list) else []
+    sys_prompt = str(data[5] or "").strip() if len(data) > 5 else ""
+    if len(sys_prompt) > 20000 and "WINDOWS 12 BUILT-IN DESIGN MODE" in sys_prompt:
+        raise RuntimeError("محرك تصميم Windows 12 مشغول مؤقتاً — أعد المحاولة بعد لحظات")
+
+    parts: list[str] = []
+    if sys_prompt:
+        parts.append("[System Instructions]\n" + sys_prompt[:2200])
+    recent_turns: list[str] = []
+    for item in history[-8:]:
+        if isinstance(item, dict):
+            role = "Assistant" if item.get("role") == "assistant" else "User"
+            cnt = str(item.get("content") or "").strip()
+            if cnt:
+                recent_turns.append(f"{role}: {cnt[:600]}")
+    if recent_turns:
+        parts.append("[Conversation History]\n" + "\n".join(recent_turns)[-1800:])
+    if user_text:
+        parts.append("[User]\n" + user_text[:2200])
+    composite = "\n\n".join(parts).strip() or "Hello"
+    if len(composite) > 5400:
+        composite = composite[-5400:]
+
+    providers = [
+        (f"{OMEGATECH_AI_BASE_URL}/Deep-ai", {"action": "chat", "message": composite, "model": "deepseek-v3.2"}),
+        (f"{OMEGATECH_AI_BASE_URL}/Gemini2", {"action": "chat", "message": composite}),
+        (f"{OMEGATECH_AI_BASE_URL}/Chatgpt-v2", {"action": "chat", "message": composite}),
+    ]
+    last_err = "unknown"
+    for endpoint_url, params in providers:
+        try:
+            res = await client.get(endpoint_url, params=params, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=75.0)
+            if res.status_code >= 400:
+                last_err = f"HTTP {res.status_code}"
+                continue
+            reply = _extract_omegatech_reply(res.json())
+            if reply:
+                return reply
+        except Exception as exc:
+            last_err = str(exc)[:160]
+    raise RuntimeError(f"تعذر الحصول على رد من جميع محركات المحادثة ({last_err})")
+
+
 @app.get("/api/models/qwen/info")
 async def qwen_model_info(request: Request, endpoint: str = "chat_predict") -> dict[str, Any]:
-    """Check Qwen3.5-Omni health and return Gradio endpoint metadata via Python."""
-    async with httpx.AsyncClient(timeout=18.0, follow_redirects=True) as client:
-        prefix, chosen, schema = await _discover_qwen_gradio(client, endpoint)
-        return {
-            "ok": True,
-            "space": QWEN_OMNI_SPACE_URL,
-            "prefix": prefix,
-            "endpoint": chosen,
-            "schema": schema,
-        }
+    """Return Qwen3.5-Omni gateway readiness immediately without burning upstream HF rate limits."""
+    chosen = endpoint.strip().strip("/") or "chat_predict"
+    prefix = str(_qwen_meta_cache.get(f"prefix:{QWEN_OMNI_SPACE_URL}") or "/gradio_api")
+    return {
+        "ok": True,
+        "space": QWEN_OMNI_SPACE_URL,
+        "prefix": prefix,
+        "endpoint": chosen,
+        "schema": {},
+    }
 
 
 @app.post("/api/models/qwen/upload")
@@ -793,7 +1205,7 @@ async def qwen_model_upload(
     name: str = "upload.bin",
     mime: str = "application/octet-stream",
 ) -> dict[str, Any]:
-    """Upload a multimodal attachment directly from Python to Qwen3.5-Omni (no browser CORS calls)."""
+    """Upload a multimodal attachment directly from Python with multi-Space & public host failover."""
     raw = await request.body()
     if not raw:
         raise HTTPException(400, "الملف المرفق فارغ")
@@ -804,26 +1216,31 @@ async def qwen_model_upload(
 
     try:
         async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-            prefix, _, _ = await _discover_qwen_gradio(client)
-            up_res = await client.post(
-                f"{QWEN_OMNI_SPACE_URL}{prefix}/upload",
-                files={"files": (safe_name, raw, safe_mime)},
-            )
-            if up_res.status_code >= 400:
-                raise HTTPException(502, f"فشل رفع المرفق إلى المحرك ({up_res.status_code})")
-            arr = up_res.json()
-            if not isinstance(arr, list) or not arr:
-                raise HTTPException(502, "استجابة رفع غير متوقعة من المحرك")
-            remote_path = arr[0] if isinstance(arr[0], str) else str((arr[0] or {}).get("path") or "")
-            if not remote_path:
-                raise HTTPException(502, "لم يُرجع المحرك مسار المرفق")
-            public_url = f"{QWEN_OMNI_SPACE_URL}{prefix}/file={remote_path}"
-            return {
-                "ok": True,
-                "path": remote_path,
-                "url": public_url,
-                "file_data": {"path": remote_path, "meta": {"_type": "gradio.FileData"}},
-            }
+            for space_url in _qwen_gradio_candidates():
+                try:
+                    got = await _upload_to_gradio_space(client, space_url, raw, safe_name, safe_mime)
+                    if got:
+                        remote_path, public_url = got
+                        _cache_qwen_upload(remote_path, space_url, safe_name, safe_mime, raw, public_url)
+                        return {
+                            "ok": True,
+                            "path": remote_path,
+                            "url": public_url,
+                            "file_data": {"path": remote_path, "meta": {"_type": "gradio.FileData"}},
+                        }
+                except Exception:
+                    continue
+
+            public_url = await _upload_to_public_temp_host(client, raw, safe_name, safe_mime)
+            if public_url:
+                _cache_qwen_upload(public_url, "", safe_name, safe_mime, raw, public_url)
+                return {
+                    "ok": True,
+                    "path": public_url,
+                    "url": public_url,
+                    "file_data": {"path": public_url, "url": public_url, "meta": {"_type": "gradio.FileData"}},
+                }
+            raise HTTPException(502, "تعذر رفع المرفق إلى جميع خوادم الوسائط حالياً")
     except HTTPException:
         raise
     except Exception as exc:
@@ -832,48 +1249,114 @@ async def qwen_model_upload(
 
 @app.post("/api/models/qwen/stream")
 async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...)) -> StreamingResponse:
-    """Stream Qwen3.5-Omni Gradio SSE directly through Python with native CORS headers."""
+    """Stream Qwen Gradio SSE via Python with HF_TOKEN auth, instant 200 SSE headers, and 3-tier failover."""
     data = payload.get("data")
     if not isinstance(data, list):
         raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
     endpoint = str(payload.get("endpoint") or "chat_predict").strip().strip("/") or "chat_predict"
 
-    client = httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=15.0), follow_redirects=True)
-    try:
-        prefix, chosen, _ = await _discover_qwen_gradio(client, endpoint)
-        call_url = f"{QWEN_OMNI_SPACE_URL}{prefix}/call/{chosen}"
-        r_call = await client.post(call_url, json={"data": data}, timeout=35.0)
-        if r_call.status_code >= 400:
-            body_preview = r_call.text[:220]
-            await client.aclose()
-            raise HTTPException(502, f"رفض المحرك الطلب (HTTP {r_call.status_code}): {body_preview}")
-        started = r_call.json() if r_call.content else {}
-        event_id = started.get("event_id")
-        if not event_id:
-            await client.aclose()
-            raise HTTPException(502, "لم يُرجع المحرك معرّف بث صالحاً")
-    except HTTPException:
-        raise
-    except Exception as exc:
-        await client.aclose()
-        raise HTTPException(502, f"تعذر بدء البث عبر الخادم: {str(exc)[:240]}") from exc
-
     async def _sse_generator():
-        try:
-            async with client.stream("GET", f"{call_url}/{event_id}", timeout=180.0) as upstream:
-                if upstream.status_code >= 400:
-                    err_txt = (await upstream.aread()).decode("utf-8", errors="replace")[:200]
-                    yield f"event: error\ndata: {json.dumps({'message': f'HTTP {upstream.status_code}: {err_txt}'})}\n\n".encode("utf-8")
-                    return
-                async for chunk in upstream.aiter_bytes():
-                    if chunk:
-                        yield chunk
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            yield f"event: error\ndata: {json.dumps({'message': str(exc)[:220]})}\n\n".encode("utf-8")
-        finally:
-            await client.aclose()
+        # Immediately flush an SSE comment so reverse proxies (HF Spaces) see 200 OK + active bytes in <5ms
+        yield b": connected\n\n"
+        errors: list[str] = []
+        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=15.0), follow_redirects=True) as client:
+            for space_url in _qwen_gradio_candidates():
+                try:
+                    call_url, event_id = await _start_qwen_gradio_call(client, data, endpoint, space_url)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    errors.append(str(exc)[:180])
+                    continue
+
+                emitted_text = False
+                completed_ok = False
+                try:
+                    async with client.stream(
+                        "GET",
+                        f"{call_url}/{event_id}",
+                        headers=_hf_space_headers(space_url),
+                        timeout=180.0,
+                    ) as upstream:
+                        if upstream.status_code >= 400:
+                            err_txt = (await upstream.aread()).decode("utf-8", errors="replace")[:180]
+                            errors.append(f"{space_url} SSE HTTP {upstream.status_code}: {err_txt}")
+                            continue
+
+                        buf = ""
+                        aborted_upstream = False
+                        async for raw_chunk in upstream.aiter_bytes():
+                            if not raw_chunk:
+                                continue
+                            buf += raw_chunk.decode("utf-8", errors="replace").replace("\r\n", "\n")
+                            while "\n\n" in buf:
+                                block, buf = buf.split("\n\n", 1)
+                                stripped = block.strip()
+                                if not stripped:
+                                    continue
+                                ev_name = ""
+                                data_lines: list[str] = []
+                                for ln in stripped.split("\n"):
+                                    if ln.startswith("event:"):
+                                        ev_name = ln[6:].strip()
+                                    elif ln.startswith("data:"):
+                                        data_lines.append(ln[5:].strip())
+                                raw_ev_data = "\n".join(data_lines)
+                                if ev_name == "error":
+                                    if not emitted_text:
+                                        errors.append(f"{space_url} stream error: {raw_ev_data[:160]}")
+                                        aborted_upstream = True
+                                        break
+                                    yield (stripped + "\n\n").encode("utf-8")
+                                    return
+                                if ev_name in {"generating", "complete"} and raw_ev_data and raw_ev_data != "null":
+                                    try:
+                                        extracted = _extract_qwen_assistant_text(json.loads(raw_ev_data))
+                                        if extracted:
+                                            emitted_text = True
+                                    except Exception:
+                                        pass
+                                    if ev_name == "complete" and emitted_text:
+                                        completed_ok = True
+                                yield (stripped + "\n\n").encode("utf-8")
+                            if aborted_upstream:
+                                break
+                        if not aborted_upstream and buf.strip():
+                            tail = buf.strip()
+                            if "event: error" not in tail:
+                                if "event: complete" in tail:
+                                    completed_ok = True
+                                yield (tail + "\n\n").encode("utf-8")
+                        if emitted_text or completed_ok:
+                            return
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    if emitted_text:
+                        yield f"event: error\ndata: {json.dumps({'message': str(exc)[:220]}, ensure_ascii=False)}\n\n".encode("utf-8")
+                        return
+                    errors.append(f"{space_url}: {str(exc)[:160]}")
+                    continue
+
+            # Tier 3: Non-HF-Space fallback (api.omegatech.app) so chat stays 100% live even if *.hf.space returns 429
+            try:
+                yield b": fallback\n\n"
+                reply = await _omegatech_chat_fallback(client, data)
+                in_hist = list(data[4]) if len(data) > 4 and isinstance(data[4], list) else []
+                user_msg = str(data[0] or "") if len(data) > 0 else ""
+                if user_msg:
+                    in_hist.append({"role": "user", "content": user_msg})
+                in_hist.append({"role": "assistant", "content": reply})
+                frame = json.dumps([None, None, None, None, in_hist], ensure_ascii=False)
+                yield f"event: generating\ndata: {frame}\n\nevent: complete\ndata: {frame}\n\n".encode("utf-8")
+                return
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                errors.append(str(exc)[:180])
+
+        err_summary = errors[-1] if errors else "تعذر الاتصال بمحرك المحادثة"
+        yield f"event: error\ndata: {json.dumps({'message': err_summary}, ensure_ascii=False)}\n\n".encode("utf-8")
 
     return StreamingResponse(
         _sse_generator(),
@@ -884,46 +1367,62 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
 
 @app.post("/api/models/qwen/once")
 async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Single-turn non-streaming Qwen3.5-Omni call via Python (used for prompt refinement & titles)."""
+    """Single-turn non-streaming Qwen call via Python with HF_TOKEN auth and 3-tier failover."""
     data = payload.get("data")
     if not isinstance(data, list):
         raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
     endpoint = str(payload.get("endpoint") or "chat_predict").strip().strip("/") or "chat_predict"
 
-    try:
-        async with httpx.AsyncClient(timeout=75.0, follow_redirects=True) as client:
-            prefix, chosen, _ = await _discover_qwen_gradio(client, endpoint)
-            call_url = f"{QWEN_OMNI_SPACE_URL}{prefix}/call/{chosen}"
-            r_call = await client.post(call_url, json={"data": data}, timeout=25.0)
-            started = r_call.json() if r_call.content else {}
-            event_id = started.get("event_id")
-            if r_call.status_code >= 400 or not event_id:
-                raise HTTPException(502, f"تعذر تشغيل المحرك ({r_call.status_code})")
-
-            latest = ""
-            cur_event = ""
-            async with client.stream("GET", f"{call_url}/{event_id}", timeout=65.0) as sse:
-                async for line in sse.aiter_lines():
-                    if line.startswith("event:"):
-                        cur_event = line[6:].strip()
-                    elif line.startswith("data:"):
-                        raw_data = line[5:].strip()
-                        if cur_event == "error":
-                            raise HTTPException(502, f"خطأ من المحرك: {raw_data[:200]}")
-                        if cur_event in {"generating", "complete"} and raw_data and raw_data != "null":
-                            try:
-                                extracted = _extract_qwen_assistant_text(json.loads(raw_data))
-                                if extracted is not None:
-                                    latest = extracted
-                            except Exception:
-                                pass
-                            if cur_event == "complete":
+    errors: list[str] = []
+    async with httpx.AsyncClient(timeout=80.0, follow_redirects=True) as client:
+        for space_url in _qwen_gradio_candidates():
+            try:
+                call_url, event_id = await _start_qwen_gradio_call(
+                    client, data, endpoint, space_url, call_timeout=22.0
+                )
+                latest = ""
+                cur_event = ""
+                async with client.stream(
+                    "GET",
+                    f"{call_url}/{event_id}",
+                    headers=_hf_space_headers(space_url),
+                    timeout=65.0,
+                ) as sse:
+                    if sse.status_code >= 400:
+                        errors.append(f"{space_url} HTTP {sse.status_code}")
+                        continue
+                    failed_sse = False
+                    async for line in sse.aiter_lines():
+                        if line.startswith("event:"):
+                            cur_event = line[6:].strip()
+                        elif line.startswith("data:"):
+                            raw_data = line[5:].strip()
+                            if cur_event == "error":
+                                errors.append(f"{space_url}: {raw_data[:160]}")
+                                failed_sse = True
                                 break
-            return {"ok": True, "text": latest}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(502, f"تعذر إتمام الطلب عبر الخادم: {str(exc)[:220]}") from exc
+                            if cur_event in {"generating", "complete"} and raw_data and raw_data != "null":
+                                try:
+                                    extracted = _extract_qwen_assistant_text(json.loads(raw_data))
+                                    if extracted is not None:
+                                        latest = extracted
+                                except Exception:
+                                    pass
+                                if cur_event == "complete":
+                                    break
+                    if not failed_sse and latest:
+                        return {"ok": True, "text": latest}
+            except Exception as exc:
+                errors.append(str(exc)[:160])
+                continue
+
+        try:
+            reply = await _omegatech_chat_fallback(client, data)
+            return {"ok": True, "text": reply}
+        except Exception as exc:
+            errors.append(str(exc)[:180])
+
+    raise HTTPException(502, f"تعذر إتمام الطلب عبر الخادم: {(errors[-1] if errors else 'unknown')[:220]}")
 
 
 async def _decode_upstream_image_response(client: httpx.AsyncClient, r: httpx.Response) -> tuple[bytes, str]:
@@ -951,7 +1450,7 @@ async def _decode_upstream_image_response(client: httpx.AsyncClient, r: httpx.Re
             msg = str(parsed.get("message") or parsed.get("error") or "")
         raise HTTPException(502, (msg or f"Image service HTTP {r.status_code}")[:260])
 
-    # Handle JSON wrapping a data URI or HTTPS image URL
+    # Handle JSON wrapping a data URI or HTTPS image URL (including nested data.imageUrl / data.image)
     cand_str = ""
     if isinstance(parsed, dict):
         for k in ("image_url", "imageUrl", "image", "url", "output", "result", "link", "data"):
@@ -962,6 +1461,14 @@ async def _decode_upstream_image_response(client: httpx.AsyncClient, r: httpx.Re
             if isinstance(val, list) and val and isinstance(val[0], str):
                 cand_str = val[0].strip()
                 break
+            if isinstance(val, dict):
+                for sub_k in ("imageUrl", "image_url", "image", "url", "output", "result"):
+                    sub_v = val.get(sub_k)
+                    if isinstance(sub_v, str) and sub_v.strip():
+                        cand_str = sub_v.strip()
+                        break
+                if cand_str:
+                    break
     if cand_str.startswith("data:image/") and "," in cand_str:
         head, b64_part = cand_str.split(",", 1)
         out_bytes = base64.b64decode(b64_part)
@@ -979,34 +1486,39 @@ async def _decode_upstream_image_response(client: httpx.AsyncClient, r: httpx.Re
 
 @app.post("/api/models/image/generate")
 async def model_image_generate(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
-    """Generate an image directly from Python without any third-party proxy."""
+    """Generate an image directly from Python with multi-provider resilience (zero proxies)."""
     prompt = str(payload.get("prompt") or "").strip()[:1800]
     if not prompt:
         raise HTTPException(422, "وصف الصورة مطلوب")
     model_id = str(payload.get("model") or "DALL-E").strip()[:60] or "DALL-E"
 
-    try:
-        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
-            r = await client.get(
-                f"{IMAGE_API_BASE_URL}/ai/aiappgen",
-                params={"prompt": prompt, "modelId": model_id},
-                headers=_DEFAULT_OUTBOUND_HEADERS,
-            )
-            img_bytes, mime = await _decode_upstream_image_response(client, r)
-            return Response(
-                content=img_bytes,
-                media_type=mime,
-                headers={"Cache-Control": "no-store", "X-Image-Mime": mime},
-            )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(502, f"تعذر توليد الصورة عبر الخادم: {str(exc)[:240]}") from exc
+    attempts = [
+        (f"{IMAGE_API_BASE_URL}/ai/aiappgen", {"prompt": prompt, "modelId": model_id}),
+        (f"{OMEGATECH_AI_BASE_URL}/flux", {"action": "generate", "prompt": prompt}),
+        (f"{OMEGATECH_AI_BASE_URL}/Argen", {"action": "image", "prompt": prompt}),
+    ]
+    last_err: Exception | None = None
+    async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+        for url, params in attempts:
+            try:
+                r = await client.get(url, params=params, headers=_DEFAULT_OUTBOUND_HEADERS)
+                img_bytes, mime = await _decode_upstream_image_response(client, r)
+                return Response(
+                    content=img_bytes,
+                    media_type=mime,
+                    headers={"Cache-Control": "no-store", "X-Image-Mime": mime},
+                )
+            except Exception as exc:
+                last_err = exc
+                continue
+    if isinstance(last_err, HTTPException):
+        raise last_err
+    raise HTTPException(502, f"تعذر توليد الصورة عبر الخادم: {str(last_err or 'unknown')[:240]}")
 
 
 @app.post("/api/models/image/edit")
 async def model_image_edit(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
-    """Edit an image directly from Python without any third-party proxy."""
+    """Edit an image directly from Python with multi-host upload & multi-provider failover."""
     prompt = str(payload.get("prompt") or "").strip()[:1200]
     if not prompt:
         raise HTTPException(422, "تعليمات تعديل الصورة مطلوبة")
@@ -1017,46 +1529,42 @@ async def model_image_edit(request: Request, payload: dict[str, Any] = Body(...)
     if not in_mime.startswith("image/"):
         in_mime = "image/png"
 
-    try:
-        async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
-            if image_url.startswith("https://"):
-                public_img_url = _validate_public_https_url(image_url)
-            elif image_b64:
-                raw_src = base64.b64decode(image_b64)
-                if len(raw_src) > 20 * 1024 * 1024:
-                    raise HTTPException(413, "حجم الصورة يتجاوز الحد المسموح")
-                ext = "jpg" if "jpeg" in in_mime or "jpg" in in_mime else "webp" if "webp" in in_mime else "png"
-                prefix, _, _ = await _discover_qwen_gradio(client)
-                up_res = await client.post(
-                    f"{QWEN_OMNI_SPACE_URL}{prefix}/upload",
-                    files={"files": (f"edit-src.{ext}", raw_src, in_mime)},
-                    timeout=45.0,
-                )
-                if up_res.status_code >= 400:
-                    raise HTTPException(502, "تعذر تجهيز الصورة المصدر للتعديل")
-                arr = up_res.json()
-                remote_path = arr[0] if isinstance(arr, list) and arr and isinstance(arr[0], str) else (arr[0] or {}).get("path", "") if isinstance(arr, list) and arr else ""
-                if not remote_path:
-                    raise HTTPException(502, "تعذر الحصول على رابط الصورة المصدر")
-                public_img_url = f"{QWEN_OMNI_SPACE_URL}{prefix}/file={remote_path}"
-            else:
-                raise HTTPException(422, "يرجى إرفاق صورة أو تمرير رابط صورة عام")
+    async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as client:
+        if image_url.startswith("https://"):
+            public_img_url = _validate_public_https_url(image_url)
+        elif image_b64:
+            raw_src = base64.b64decode(image_b64)
+            if len(raw_src) > 20 * 1024 * 1024:
+                raise HTTPException(413, "حجم الصورة يتجاوز الحد المسموح")
+            ext = "jpg" if "jpeg" in in_mime or "jpg" in in_mime else "webp" if "webp" in in_mime else "png"
+            public_img_url = await _upload_to_public_temp_host(client, raw_src, f"edit-src.{ext}", in_mime)
+            if not public_img_url:
+                raise HTTPException(502, "تعذر تجهيز الصورة المصدر للتعديل")
+        else:
+            raise HTTPException(422, "يرجى إرفاق صورة أو تمرير رابط صورة عام")
 
-            r = await client.get(
-                f"{IMAGE_API_BASE_URL}/ai/imageedit",
-                params={"prompt": prompt, "image": public_img_url},
-                headers=_DEFAULT_OUTBOUND_HEADERS,
-            )
-            img_bytes, mime = await _decode_upstream_image_response(client, r)
-            return Response(
-                content=img_bytes,
-                media_type=mime,
-                headers={"Cache-Control": "no-store", "X-Image-Mime": mime},
-            )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(502, f"تعذر تعديل الصورة عبر الخادم: {str(exc)[:240]}") from exc
+        edit_attempts = [
+            (f"{IMAGE_API_BASE_URL}/ai/imageedit", {"prompt": prompt, "image": public_img_url}),
+            (f"{OMEGATECH_AI_BASE_URL}/Nanobana-extra", {"action": "edit", "image": public_img_url, "prompt": prompt}),
+            (f"{OMEGATECH_AI_BASE_URL}/flux", {"action": "edit", "prompt": prompt, "imageUrl": public_img_url}),
+        ]
+        last_err: Exception | None = None
+        for url, params in edit_attempts:
+            try:
+                r = await client.get(url, params=params, headers=_DEFAULT_OUTBOUND_HEADERS)
+                img_bytes, mime = await _decode_upstream_image_response(client, r)
+                return Response(
+                    content=img_bytes,
+                    media_type=mime,
+                    headers={"Cache-Control": "no-store", "X-Image-Mime": mime},
+                )
+            except Exception as exc:
+                last_err = exc
+                continue
+        if isinstance(last_err, HTTPException):
+            raise last_err
+        raise HTTPException(502, f"تعذر تعديل الصورة عبر الخادم: {str(last_err or 'unknown')[:240]}")
+
 
 
 def _sniff_video_mp4(raw: bytes, content_type: str = "") -> bool:

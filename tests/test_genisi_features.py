@@ -652,6 +652,89 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             )
             self.assertEqual(r_ssrf.status_code, 400)
 
+    def test_qwen_hf_token_auth_and_429_multi_tier_failover(self) -> None:
+        real_async_client = httpx.AsyncClient
+        seen_auth_headers: list[str] = []
+        qwen3_payloads: list[list] = []
+        fail_all_hf = {"on": False}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            url = str(req.url)
+            auth_val = req.headers.get("authorization", "")
+            if ".hf.space" in url and auth_val:
+                seen_auth_headers.append(auth_val)
+
+            # Primary Space always returns 429 (simulating shared HF container NAT IP rate limit)
+            if "qwen-qwen3-5-omni-offline-demo.hf.space" in url:
+                return httpx.Response(429, text="Too Many Requests")
+
+            # Secondary official Space (Qwen3-Omni-Demo) succeeds unless fail_all_hf["on"] is True
+            if "qwen-qwen3-omni-demo.hf.space" in url:
+                if fail_all_hf["on"]:
+                    return httpx.Response(429, text="Too Many Requests")
+                if url.endswith("/gradio_api/call/chat_predict") and req.method == "POST":
+                    body = json.loads(req.content.decode("utf-8"))
+                    qwen3_payloads.append(body["data"])
+                    return httpx.Response(200, json={"event_id": "evt_qwen3_fallback"})
+                if url.endswith("/gradio_api/call/chat_predict/evt_qwen3_fallback"):
+                    sse = (
+                        "event: complete\n"
+                        'data: [null, null, null, null, [{"role": "user", "content": "مرحباً"}, {"role": "assistant", "content": "رد احتياطي من Qwen3 Omni"}]]\n\n'
+                    ).encode("utf-8")
+                    return httpx.Response(200, content=sse, headers={"Content-Type": "text/event-stream"})
+
+            # Tertiary non-HF-Space fallback (api.omegatech.app)
+            if "api.omegatech.app/api/ai/Deep-ai" in url:
+                return httpx.Response(
+                    200,
+                    json={"statusCode": 200, "success": True, "data": {"reply": "رد فوري من المحرك الثالث بدون أي 502"}},
+                )
+
+            raise AssertionError(f"Unexpected URL in failover test: {url}")
+
+        transport = httpx.MockTransport(handler)
+        with (
+            patch.dict(os.environ, {"HF_TOKEN": "hf_test_token_123456"}, clear=False),
+            patch.object(
+                self.main_mod.httpx,
+                "AsyncClient",
+                side_effect=lambda **kw: real_async_client(transport=transport, **{k: v for k, v in kw.items() if k != "transport"}),
+            ),
+            patch("app.main.asyncio.sleep", return_value=None),
+        ):
+            # 1) /api/models/qwen/info succeeds in <1ms with zero upstream calls
+            r_info = self.client.get("/api/models/qwen/info")
+            self.assertEqual(r_info.status_code, 200)
+            self.assertTrue(r_info.json()["ok"])
+
+            # 2) Primary 429 -> seamless failover to Qwen3-Omni-Demo with 12 adapted args & HF_TOKEN header
+            r_stream = self.client.post(
+                "/api/models/qwen/stream",
+                json={"data": ["مرحباً", None, None, None, [], "sys", 0.5, 0.8, 20], "endpoint": "chat_predict"},
+            )
+            self.assertEqual(r_stream.status_code, 200)
+            self.assertIn("رد احتياطي من Qwen3 Omni", r_stream.text)
+            self.assertIn("Bearer hf_test_token_123456", seen_auth_headers)
+            self.assertEqual(len(qwen3_payloads[-1]), 12)
+            self.assertEqual(qwen3_payloads[-1][6], "Cherry / 芊悦")
+            self.assertFalse(qwen3_payloads[-1][10])
+
+            # 3) All *.hf.space 429 -> seamless failover to api.omegatech.app (still HTTP 200, zero 502!)
+            fail_all_hf["on"] = True
+            r_stream_t3 = self.client.post(
+                "/api/models/qwen/stream",
+                json={"data": ["كيف حالك؟", None, None, None, [], "sys", 0.5, 0.8, 20], "endpoint": "chat_predict"},
+            )
+            self.assertEqual(r_stream_t3.status_code, 200)
+            self.assertIn("رد فوري من المحرك الثالث بدون أي 502", r_stream_t3.text)
+
+            r_once_t3 = self.client.post(
+                "/api/models/qwen/once",
+                json={"data": ["عنوان قصير", None, None, None, [], "sys", 0.2, 0.8, 12], "endpoint": "chat_predict"},
+            )
+            self.assertEqual(r_once_t3.status_code, 200)
+            self.assertEqual(r_once_t3.json()["text"], "رد فوري من المحرك الثالث بدون أي 502")
+
 
 if __name__ == "__main__":
     unittest.main()
