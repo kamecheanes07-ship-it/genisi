@@ -8679,40 +8679,66 @@ function syncPendingSessionMedia(){ if (typeof window.syncPendingSessionMedia ==
   }
 
   async function synthesizeVoxCPM(spokenText, controlInstruction, langCode, signal){
-    const text = String(spokenText || '').trim().slice(0, 1100);
+    const text = String(spokenText || '')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/https?:\/\/\S+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 900);
     if (!text) return null;
     const hasNonEnZh = /[\u0600-\u06FF\u0400-\u04FF\u3040-\u30FF\uAC00-\uD7AFàâçéèêëîïôûùüÿñáíóúäöüß]/i.test(text);
     const baseLang = String(langCode || '').toLowerCase();
     const doNormalize = !hasNonEnZh && (baseLang.startsWith('en') || baseLang.startsWith('zh'));
 
-    // Direct Python FastAPI synthesis (/api/voice/tts -> openbmb/VoxCPM-Demo) — zero direct browser proxy calls
-    const reqBody = {
-      text: text,
-      control_instruction: controlInstruction,
-      cfg_value: 2.0,
-      do_normalize: doNormalize
-    };
-    if (voiceState.anchorB64){
-      reqBody.reference_audio_base64 = voiceState.anchorB64;
+    // Direct Python FastAPI synthesis (/api/voice/tts -> VoxCPM2 / Qwen3-TTS failover) — zero browser proxies
+    let lastErr = null;
+    for (let attempt = 0; attempt < 2; attempt++){
+      if (signal && signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      const reqBody = {
+        text: text,
+        control_instruction: controlInstruction,
+        cfg_value: 2.0,
+        do_normalize: doNormalize
+      };
+      if (attempt === 0 && voiceState.anchorB64){
+        reqBody.reference_audio_base64 = voiceState.anchorB64;
+        if (voiceState.anchorMime) reqBody.reference_audio_mime = voiceState.anchorMime;
+      }
+      try {
+        const res = await fetch('/api/voice/tts', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          credentials: 'same-origin',
+          signal: signal,
+          body: JSON.stringify(reqBody)
+        });
+        if (!res.ok){
+          const errJ = await res.json().catch(() => ({}));
+          if (attempt === 0 && voiceState.anchorB64){
+            voiceState.anchorB64 = '';
+            voiceState.anchorBlob = null;
+          }
+          throw new Error(errJ.detail || ('تعذّر توليد الصوت (HTTP ' + res.status + ')'));
+        }
+        const blob = await res.blob();
+        if (!blob || blob.size <= 200) throw new Error('لم يُرجع محرك الصوت مقطعاً صالحاً');
+        // Cache reference clip only when size is within safe 2s..24s duration bounds (never <1s or >30s)
+        if (!voiceState.anchorBlob && blob.size >= 28000 && blob.size <= 420000){
+          voiceState.anchorBlob = blob;
+          voiceState.anchorMime = blob.type || 'audio/mpeg';
+          blobToBase64Raw(blob).then(b64 => { if (b64) voiceState.anchorB64 = b64; }).catch(() => {});
+        }
+        return blob;
+      } catch (err){
+        if (err && err.name === 'AbortError') throw err;
+        lastErr = err;
+        if (attempt === 0){
+          await new Promise(r => setTimeout(r, 350));
+          continue;
+        }
+      }
     }
-    const res = await fetch('/api/voice/tts', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      credentials: 'same-origin',
-      signal: signal,
-      body: JSON.stringify(reqBody)
-    });
-    if (!res.ok){
-      const errJ = await res.json().catch(() => ({}));
-      throw new Error(errJ.detail || ('تعذّر توليد الصوت (HTTP ' + res.status + ')'));
-    }
-    const blob = await res.blob();
-    if (!blob || blob.size <= 200) throw new Error('لم يُرجع محرك الصوت مقطعاً صالحاً');
-    if (!voiceState.anchorBlob && blob.size < 4500000){
-      voiceState.anchorBlob = blob;
-      blobToBase64Raw(blob).then(b64 => { if (b64) voiceState.anchorB64 = b64; }).catch(() => {});
-    }
-    return blob;
+    throw (lastErr || new Error('تعذّر توليد الصوت'));
   }
 
   function ensureAudioContext(){
@@ -9104,8 +9130,10 @@ function syncPendingSessionMedia(){ if (typeof window.syncPendingSessionMedia ==
       if (firstVoiceBlob){
         const aid = 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         const vTitle = T().tVoiceCall + ' — Genisi';
-        mediaPut({id: aid, kind: 'audio', mime: firstVoiceBlob.type || 'audio/wav', blob: firstVoiceBlob, title: vTitle});
-        if (syncMediaBlobHook) syncMediaBlobHook(aid, firstVoiceBlob, {kind: 'audio', name: 'genisi-voice.wav', mime: firstVoiceBlob.type || 'audio/wav'});
+        const vMime = firstVoiceBlob.type || 'audio/mpeg';
+        const vExt = vMime.includes('wav') ? 'wav' : (vMime.includes('ogg') ? 'ogg' : 'mp3');
+        mediaPut({id: aid, kind: 'audio', mime: vMime, blob: firstVoiceBlob, title: vTitle});
+        if (syncMediaBlobHook) syncMediaBlobHook(aid, firstVoiceBlob, {kind: 'audio', name: 'genisi-voice.' + vExt, mime: vMime});
         aiMsg.media.push({id: aid, kind: 'audio', url: '/api/media/' + aid, title: vTitle});
         if (b){
           const mc = mediaCard(aiMsg.media[aiMsg.media.length - 1]);

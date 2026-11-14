@@ -377,8 +377,9 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
 
     def test_voxcpm_voice_tts_disables_normalizer_for_arabic_and_streams_audio(self) -> None:
         captured_call_payload = {}
-        fake_wav = b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00"
+        fake_wav = b"RIFF$\x01\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x01\x00\x00" + (b"\x00\x10" * 160)
         real_async_client = httpx.AsyncClient
+        self.main_mod._voxcpm_meta_cache.clear()
 
         def handler(req: httpx.Request) -> httpx.Response:
             url = str(req.url)
@@ -419,6 +420,108 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             self.assertEqual(len(sent_data), 8)
             self.assertEqual(sent_data[1], "Warm, articulate young adult male voice, natural conversational rhythm")
             self.assertFalse(sent_data[6], "do_normalize must be False when Arabic text is present")
+
+    def test_voice_tts_mp3_anchor_sse_401_retry_and_qwen3_tts_failover(self) -> None:
+        """Ensure /api/voice/tts never 502s on MP3 reference anchors, dataset-only HF_TOKEN 401s, or VoxCPM busy state."""
+        import base64 as b64_mod
+
+        real_async_client = httpx.AsyncClient
+        fake_mp3 = b"ID3\x04\x00\x00\x00\x00\x00\x10" + (b"\xff\xfb\x90\x64" * 280)
+        fake_wav = b"RIFF$\x01\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00D\xac\x00\x00\x88X\x01\x00\x02\x00\x10\x00data\x00\x01\x00\x00" + (b"\x02\x08" * 160)
+        uploaded_raw_parts: list[bytes] = []
+        vox_calls: list[list] = []
+        qwen_vd_calls: list[list] = []
+        mode = {"stage": "ref_reject_then_design_ok"}
+
+        def handler(req: httpx.Request) -> httpx.Response:
+            url = str(req.url)
+            auth_hdr = req.headers.get("authorization", "")
+
+            if "openbmb-voxcpm-demo.hf.space" in url:
+                if mode["stage"] == "vox_busy":
+                    return httpx.Response(429, text="BackendBusyError")
+                # Simulate dataset-scoped HF_TOKEN rejected with 401 on public Space endpoints
+                if auth_hdr:
+                    return httpx.Response(401, json={"error": "Invalid credentials in Authorization header"})
+                if url.endswith("/gradio_api/upload") and req.method == "POST":
+                    uploaded_raw_parts.append(req.read())
+                    return httpx.Response(200, json=["/tmp/gradio/voice-anchor.mp3"])
+                if url.endswith("/gradio_api/call/generate") and req.method == "POST":
+                    body = json.loads(req.content.decode("utf-8"))
+                    vox_calls.append(body["data"])
+                    ev_id = "evt_ref_bad" if body["data"][2] is not None else "evt_design_ok"
+                    return httpx.Response(200, json={"event_id": ev_id})
+                if url.endswith("/gradio_api/call/generate/evt_ref_bad"):
+                    sse_err = b'event: error\ndata: "Reference audio must be between 1 and 30 seconds"\n\n'
+                    return httpx.Response(200, content=sse_err, headers={"Content-Type": "text/event-stream"})
+                if url.endswith("/gradio_api/call/generate/evt_design_ok"):
+                    sse_ok = (
+                        'event: complete\ndata: [{"path":"/tmp/gradio/out.mp3","url":"https://openbmb-voxcpm-demo.hf.space/gradio_api/file=/tmp/gradio/out.mp3"}]\n\n'
+                    ).encode("utf-8")
+                    return httpx.Response(200, content=sse_ok, headers={"Content-Type": "text/event-stream"})
+                if "file=/tmp/gradio/out.mp3" in url:
+                    return httpx.Response(200, content=fake_mp3, headers={"Content-Type": "application/octet-stream"})
+
+            if "qwen-qwen3-tts-voice-design.hf.space" in url:
+                if auth_hdr:
+                    return httpx.Response(401, json={"error": "Invalid token"})
+                if url.endswith("/gradio_api/call/tts_interface") and req.method == "POST":
+                    body = json.loads(req.content.decode("utf-8"))
+                    qwen_vd_calls.append(body["data"])
+                    return httpx.Response(200, json={"event_id": "evt_qwen_vd_1"})
+                if url.endswith("/gradio_api/call/tts_interface/evt_qwen_vd_1"):
+                    sse_ok = (
+                        'event: complete\ndata: [{"path":"/tmp/gradio/qwen_vd.wav","url":"https://qwen-qwen3-tts-voice-design.hf.space/gradio_api/file=/tmp/gradio/qwen_vd.wav"}]\n\n'
+                    ).encode("utf-8")
+                    return httpx.Response(200, content=sse_ok, headers={"Content-Type": "text/event-stream"})
+                if "file=/tmp/gradio/qwen_vd.wav" in url:
+                    return httpx.Response(200, content=fake_wav, headers={"Content-Type": "audio/wav"})
+
+            raise AssertionError(f"Unexpected TTS URL: {url}")
+
+        transport = httpx.MockTransport(handler)
+        self.main_mod._voxcpm_meta_cache.clear()
+        self.main_mod._qwen_meta_cache.clear()
+        with (
+            patch.dict(os.environ, {"HF_TOKEN": "hf_dataset_only_token_xyz"}, clear=False),
+            patch.object(
+                self.main_mod.httpx,
+                "AsyncClient",
+                side_effect=lambda **kw: real_async_client(transport=transport, **{k: v for k, v in kw.items() if k != "transport"}),
+            ),
+        ):
+            # Case A: MP3 anchor uploaded as voice-anchor.mp3 (never mislabeled .wav), 401 retried, ref error retried in Voice Design mode
+            res1 = self.client.post(
+                "/api/voice/tts",
+                json={
+                    "text": "مرحباً بك في جينيسي، الصوت يعمل الآن بدون أي خطأ 502.",
+                    "control_instruction": "Warm young male voice, calm natural pace",
+                    "reference_audio_base64": b64_mod.b64encode(fake_mp3).decode("ascii"),
+                },
+            )
+            self.assertEqual(res1.status_code, 200, res1.text)
+            self.assertEqual(res1.content, fake_mp3)
+            self.assertEqual(res1.headers.get("content-type"), "audio/mpeg")
+            self.assertTrue(uploaded_raw_parts and b"voice-anchor.mp3" in uploaded_raw_parts[0])
+            self.assertNotIn(b"voice-anchor.wav", uploaded_raw_parts[0])
+            self.assertEqual(len(vox_calls), 2, "Must retry without reference_audio when cloning clip is rejected")
+            self.assertIsNone(vox_calls[1][2])
+
+            # Case B: VoxCPM busy (429) -> seamless failover to official Qwen3-TTS-Voice-Design
+            mode["stage"] = "vox_busy"
+            self.main_mod._voxcpm_meta_cache.clear()
+            res2 = self.client.post(
+                "/api/voice/tts",
+                json={
+                    "text": "هذا رد صوتي احتياطي فوري عبر محرك Qwen3 TTS الرسمي.",
+                    "control_instruction": "Clear warm female conversational voice",
+                },
+            )
+            self.assertEqual(res2.status_code, 200, res2.text)
+            self.assertEqual(res2.content, fake_wav)
+            self.assertIn("audio/wav", res2.headers.get("content-type", ""))
+            self.assertEqual(len(qwen_vd_calls), 1)
+            self.assertEqual(qwen_vd_calls[0][1], "Clear warm female conversational voice")
 
     def test_frontend_ui_specs_image_square_and_voice_pill_bar(self) -> None:
         html = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
@@ -676,10 +779,24 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             self.assertEqual(r_ssrf.status_code, 400)
 
     def test_qwen_hf_token_auth_and_429_multi_tier_failover(self) -> None:
+        # Enforce user constraint: ONLY Qwen language models — zero Omegatech/Pollinations LLMs in app/main.py
+        main_src = (REPO_ROOT / "app" / "main.py").read_text(encoding="utf-8")
+        for banned_llm in (
+            "_omegatech_chat_fallback",
+            "POLLINATIONS_OPENAI_URL",
+            "openai-fast",
+            "deepseek-v3.2",
+            "/Deep-ai",
+            "/Gemini2",
+            "/Chatgpt-v2",
+        ):
+            self.assertNotIn(banned_llm, main_src, f"Non-Qwen LLM reference must not exist in app/main.py: {banned_llm}")
+
         real_async_client = httpx.AsyncClient
         seen_auth_headers: list[str] = []
         ms_payloads: list[list] = []
         qwen3_payloads: list[list] = []
+        qwen25_payloads: list[list] = []
         stage = {"mode": "ms_ok"}
         self.main_mod._qwen_meta_cache.clear()
 
@@ -689,7 +806,7 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             if ".hf.space" in url and auth_val:
                 seen_auth_headers.append(auth_val)
 
-            # Tier 1: Primary HF Space returns 429 (simulating shared HF container NAT IP rate limit)
+            # Tier 1: Primary Qwen3.5-Omni-Offline-Demo HF Space returns 429
             if "qwen-qwen3-5-omni-offline-demo.hf.space" in url:
                 return httpx.Response(429, text="Too Many Requests")
 
@@ -723,9 +840,9 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
                     ).encode("utf-8")
                     return httpx.Response(200, content=sse, headers={"Content-Type": "text/event-stream"})
 
-            # Tier 3: Official Qwen3-Omni-Demo HF Space
+            # Tier 3: Official Qwen3-Omni-Demo HF Space (12 positional args)
             if "qwen-qwen3-omni-demo.hf.space" in url:
-                if stage["mode"] == "all_gradio_down":
+                if stage["mode"] == "qwen25_ok":
                     return httpx.Response(429, text="Too Many Requests")
                 if url.endswith("/gradio_api/call/chat_predict") and req.method == "POST":
                     body = json.loads(req.content.decode("utf-8"))
@@ -738,19 +855,20 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
                     ).encode("utf-8")
                     return httpx.Response(200, content=sse, headers={"Content-Type": "text/event-stream"})
 
-            # Tier 4a: OpenAI-compatible POST fallback
-            if "text.pollinations.ai/openai" in url:
-                return httpx.Response(503, text="temporarily unavailable")
+            # Tier 4: Official Qwen2.5-Omni-7B-Demo HF Space (7 positional args — pure Qwen!)
+            if "qwen-qwen2-5-omni-7b-demo.hf.space" in url:
+                if url.endswith("/gradio_api/call/chat_predict") and req.method == "POST":
+                    body = json.loads(req.content.decode("utf-8"))
+                    qwen25_payloads.append(body["data"])
+                    return httpx.Response(200, json={"event_id": "evt_qwen25_fallback"})
+                if url.endswith("/gradio_api/call/chat_predict/evt_qwen25_fallback"):
+                    sse = (
+                        "event: complete\n"
+                        'data: ["", null, null, null, [{"role": "user", "content": "مرحباً"}, {"role": "assistant", "content": "رد نقي من Qwen2.5-Omni فقط بدون Omegatech"}]]\n\n'
+                    ).encode("utf-8")
+                    return httpx.Response(200, content=sse, headers={"Content-Type": "text/event-stream"})
 
-            # Tier 4b: Byte-capped (<6 KB URL) Omegatech GET fallback
-            if "api.omegatech.app/api/ai/Deep-ai" in url:
-                self.assertLess(len(url), 6000, "GET fallback URL exceeded safe proxy URI byte limit!")
-                return httpx.Response(
-                    200,
-                    json={"statusCode": 200, "success": True, "data": {"reply": "رد فوري من المحرك الاحتياطي بدون أي 502 أو 414"}},
-                )
-
-            raise AssertionError(f"Unexpected URL in failover test: {url}")
+            raise AssertionError(f"Unexpected non-Qwen URL in failover test: {url}")
 
         transport = httpx.MockTransport(handler)
         with (
@@ -790,23 +908,26 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             self.assertEqual(qwen3_payloads[-1][6], "Cherry / 芊悦")
             self.assertFalse(qwen3_payloads[-1][10])
 
-            # 4) All Gradio mirrors down + huge 41 KB Arabic system prompt -> safe byte-capped fallback (zero 414/502!)
+            # 4) Tiers 1-3 throttled -> seamless failover to official Qwen2.5-Omni-7B-Demo (7 args, 100% pure Qwen)
             self.main_mod._qwen_meta_cache.clear()
-            stage["mode"] = "all_gradio_down"
+            stage["mode"] = "qwen25_ok"
             huge_arabic_sys = ("أنت جينيسي أطلس المساعد الذكي المتقدم. " * 950) + "\n<tool_call>{\"name\":\"web_search\"}</tool_call>"
             r_stream_t4 = self.client.post(
                 "/api/models/qwen/stream",
                 json={"data": ["كيف حالك اليوم يا جينيسي؟", None, None, None, [], huge_arabic_sys, 0.5, 0.8, 20], "endpoint": "chat_predict"},
             )
             self.assertEqual(r_stream_t4.status_code, 200)
-            self.assertIn("رد فوري من المحرك الاحتياطي بدون أي 502 أو 414", r_stream_t4.text)
+            self.assertIn("رد نقي من Qwen2.5-Omni فقط بدون Omegatech", r_stream_t4.text)
+            self.assertEqual(len(qwen25_payloads[-1]), 7)
+            self.assertEqual(qwen25_payloads[-1][6], "Cherry")
 
+            self.main_mod._qwen_meta_cache.clear()
             r_once_t4 = self.client.post(
                 "/api/models/qwen/once",
                 json={"data": ["عنوان قصير", None, None, None, [], huge_arabic_sys, 0.2, 0.8, 12], "endpoint": "chat_predict"},
             )
             self.assertEqual(r_once_t4.status_code, 200)
-            self.assertEqual(r_once_t4.json()["text"], "رد فوري من المحرك الاحتياطي بدون أي 502 أو 414")
+            self.assertEqual(r_once_t4.json()["text"], "رد نقي من Qwen2.5-Omni فقط بدون Omegatech")
 
     def test_qwen_empty_complete_suppression_and_split_arabic_utf8_chunks(self) -> None:
         """Ensure empty upstream `event: complete` never aborts browser stream and split 2-byte Arabic UTF-8 never corrupts."""

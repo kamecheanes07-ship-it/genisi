@@ -48,16 +48,21 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "production").lower()
 QWEN_OMNI_SPACE_URL = os.getenv("QWEN_OMNI_SPACE_URL", "https://qwen-qwen3-5-omni-offline-demo.hf.space").rstrip("/")
 QWEN_MODELSCOPE_MIRROR_URL = os.getenv("QWEN_MODELSCOPE_MIRROR_URL", "https://qwen-qwen3-5-omni-offline-demo.ms.show").rstrip("/")
 QWEN3_OMNI_FALLBACK_URL = os.getenv("QWEN3_OMNI_FALLBACK_URL", "https://qwen-qwen3-omni-demo.hf.space").rstrip("/")
-POLLINATIONS_OPENAI_URL = os.getenv("POLLINATIONS_OPENAI_URL", "https://text.pollinations.ai/openai").strip()
+QWEN25_OMNI_FALLBACK_URL = os.getenv("QWEN25_OMNI_FALLBACK_URL", "https://qwen-qwen2-5-omni-7b-demo.hf.space").rstrip("/")
 OMEGATECH_AI_BASE_URL = os.getenv("OMEGATECH_AI_BASE_URL", "https://api.omegatech.app/api/ai").rstrip("/")
 STEPAUDIO_MUSIC_SPACE_URL = os.getenv("STEPAUDIO_MUSIC_SPACE_URL", "https://stepfun-ai-stepaudio-3-music.hf.space").rstrip("/")
 VOXCPM_SPACE_URL = os.getenv("VOXCPM_SPACE_URL", "https://openbmb-voxcpm-demo.hf.space").rstrip("/")
+QWEN3_TTS_VD_SPACE_URL = os.getenv("QWEN3_TTS_VD_SPACE_URL", "https://qwen-qwen3-tts-voice-design.hf.space").rstrip("/")
+QWEN3_TTS_VD_MS_URL = os.getenv("QWEN3_TTS_VD_MS_URL", "https://qwen-qwen3-tts-voice-design.ms.show").rstrip("/")
+QWEN3_TTS_DEMO_SPACE_URL = os.getenv("QWEN3_TTS_DEMO_SPACE_URL", "https://qwen-qwen3-tts-demo.hf.space").rstrip("/")
+QWEN3_TTS_DEMO_MS_URL = os.getenv("QWEN3_TTS_DEMO_MS_URL", "https://qwen-qwen3-tts-demo.ms.show").rstrip("/")
 IMAGE_API_BASE_URL = os.getenv("IMAGE_API_BASE_URL", "https://prexzyapis.com").rstrip("/")
 VIDEO_API_URL = os.getenv("VIDEO_API_URL", "https://api.omegatech.app/api/ai/Txt2video").strip()
 _qwen_meta_cache: dict[str, Any] = {"ts": 0.0, "prefix": None, "endpoints": None}
 _recent_qwen_uploads: dict[str, dict[str, Any]] = {}
 _music_schema_cache: dict[str, Any] = {"ts": 0.0, "submit_props": None}
 _voxcpm_meta_cache: dict[str, Any] = {"ts": 0.0, "prefix": None}
+_voxcpm_sem = asyncio.Semaphore(2)
 _video_jobs: dict[str, dict[str, Any]] = {}
 _video_tasks: dict[str, asyncio.Task[Any]] = {}
 _cleanup_task: asyncio.Task[Any] | None = None
@@ -722,13 +727,204 @@ async def music_query(request: Request, payload: dict[str, Any] = Body(...)) -> 
         raise HTTPException(502, f"تعذر الاستعلام عن حالة الموسيقى: {str(exc)[:240]}") from exc
 
 
+def _sniff_audio_mime_and_ext(raw: bytes, fallback_mime: str = "") -> tuple[str, str]:
+    """Detect real audio container format from magic bytes so VoxCPM/Gradio never receives mislabeled extensions."""
+    head = raw[:16] if raw else b""
+    if len(head) >= 12 and head[:4] == b"RIFF" and head[8:12] == b"WAVE":
+        return "audio/wav", "wav"
+    if head.startswith(b"ID3") or (len(head) >= 2 and head[0] == 0xFF and (head[1] & 0xE0) == 0xE0):
+        return "audio/mpeg", "mp3"
+    if head.startswith(b"OggS"):
+        return "audio/ogg", "ogg"
+    if head.startswith(b"fLaC"):
+        return "audio/flac", "flac"
+    if head.startswith(b"\x1a\x45\xdf\xa3"):
+        return "audio/webm", "webm"
+    if len(head) >= 12 and head[4:8] == b"ftyp":
+        return "audio/mp4", "m4a"
+    clean_fb = (fallback_mime or "").split(";")[0].strip().lower()
+    ext_map = {
+        "audio/mpeg": "mp3",
+        "audio/mp3": "mp3",
+        "audio/wav": "wav",
+        "audio/x-wav": "wav",
+        "audio/wave": "wav",
+        "audio/ogg": "ogg",
+        "audio/opus": "opus",
+        "audio/flac": "flac",
+        "audio/webm": "webm",
+        "audio/mp4": "m4a",
+        "audio/aac": "aac",
+    }
+    if clean_fb in ext_map:
+        return ("audio/mpeg" if clean_fb == "audio/mp3" else clean_fb), ext_map[clean_fb]
+    return "audio/wav", "wav"
+
+
+def _clean_tts_text(raw: str, max_chars: int = 900) -> str:
+    """Strip markdown blocks, URLs, and control characters while staying safely inside VoxCPM2's token budget."""
+    txt = str(raw or "")
+    txt = re.sub(r"```[\s\S]*?```", " ", txt)
+    txt = re.sub(r"`([^`]+)`", r"\1", txt)
+    txt = re.sub(r"https?://\S+", " ", txt)
+    txt = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", txt)
+    txt = re.sub(r"\s+", " ", txt).strip()
+    return txt[:max_chars].strip()
+
+
+def _select_qwen3_tts_voice(control: str) -> str:
+    """Map natural-language voice persona description to an expressive Qwen3-TTS preset."""
+    low = (control or "").lower()
+    if any(w in low for w in ("female", "woman", "girl", "sopran", "alto", "أنث", "امرأ", "فتاة", "نسائ")):
+        if any(w in low for w in ("warm", "calm", "soft", "gentle", "serene", "هادئ", "دافئ")):
+            return "Serena / 苏瑶"
+        return "Cherry / 芊悦"
+    if any(w in low for w in ("male", "man", "boy", "baritone", "tenor", "bass", "ذكر", "رجل", "شاب", "رجول")):
+        return "Ethan / 晨煦"
+    return "Cherry / 芊悦"
+
+
+async def _run_gradio_tts_call(
+    client: httpx.AsyncClient,
+    *,
+    space_url: str,
+    endpoint: str,
+    gradio_data: list[Any],
+    call_timeout: float = 24.0,
+    sse_timeout: float = 75.0,
+) -> tuple[bytes, str]:
+    """Execute a Gradio TTS call + SSE wait + audio download with HF_TOKEN 401 fallback and MIME sniffing."""
+    base = space_url.rstrip("/")
+    prefix_key = f"tts_prefix:{base}"
+    prefix = str(_voxcpm_meta_cache.get(prefix_key) if prefix_key in _voxcpm_meta_cache else "/gradio_api")
+
+    r_call = await _hf_request_with_retry(
+        client,
+        "POST",
+        f"{base}{prefix}/call/{endpoint}",
+        space_url=base,
+        json={"data": gradio_data},
+        timeout=call_timeout,
+    )
+    if r_call.status_code == 404 and prefix == "/gradio_api":
+        prefix = ""
+        r_call = await _hf_request_with_retry(
+            client,
+            "POST",
+            f"{base}/call/{endpoint}",
+            space_url=base,
+            json={"data": gradio_data},
+            timeout=call_timeout,
+        )
+    _voxcpm_meta_cache[prefix_key] = prefix
+    if base == VOXCPM_SPACE_URL:
+        _voxcpm_meta_cache["prefix"] = prefix
+        _voxcpm_meta_cache["ts"] = time.time()
+
+    if r_call.status_code == 429:
+        _voxcpm_meta_cache[f"throttled:{base}"] = time.time() + 45.0
+        raise RuntimeError(f"{base} HTTP 429")
+    if r_call.status_code >= 400:
+        raise RuntimeError(f"{base} HTTP {r_call.status_code}: {r_call.text[:160]}")
+
+    call_json = r_call.json() if r_call.content else {}
+    event_id = str(call_json.get("event_id") or "").strip()
+    if not event_id:
+        raise RuntimeError(f"{base}: missing event_id")
+
+    sse_url = f"{base}{prefix}/call/{endpoint}/{event_id}"
+    host = (urlsplit(base).hostname or "").lower()
+    tok = _get_hf_token()
+    can_auth = bool(
+        tok
+        and (host.endswith(".hf.space") or host.endswith("huggingface.co"))
+        and (time.time() - float(_qwen_meta_cache.get(f"bad_tok:{tok[:12]}") or 0.0) > 900.0)
+    )
+    sse_auth_modes = [True, False] if can_auth else [False]
+
+    audio_url = ""
+    for use_auth in sse_auth_modes:
+        cur_event = ""
+        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+        buf = ""
+        retried_unauth = False
+        async with client.stream(
+            "GET",
+            sse_url,
+            headers=_hf_space_headers(base, include_auth=use_auth, accept="text/event-stream"),
+            timeout=sse_timeout,
+        ) as sse:
+            if sse.status_code in {401, 403} and use_auth:
+                if tok:
+                    _qwen_meta_cache[f"bad_tok:{tok[:12]}"] = time.time()
+                retried_unauth = True
+            elif sse.status_code >= 400:
+                if sse.status_code == 429:
+                    _voxcpm_meta_cache[f"throttled:{base}"] = time.time() + 45.0
+                err_body = (await sse.aread()).decode("utf-8", errors="replace")[:180]
+                raise RuntimeError(f"{base} SSE HTTP {sse.status_code}: {err_body}")
+            else:
+                async for raw_chunk in sse.aiter_bytes():
+                    buf += decoder.decode(raw_chunk, final=False).replace("\r\n", "\n")
+                    while "\n" in buf:
+                        line, buf = buf.split("\n", 1)
+                        line = line.rstrip("\r")
+                        if line.startswith("event:"):
+                            cur_event = line[6:].strip()
+                        elif line.startswith("data:"):
+                            raw_data = line[5:].strip()
+                            if cur_event == "error":
+                                low_err = raw_data.lower()
+                                if any(k in low_err for k in ("busy", "queue", "concurrent", "429", "unstable")):
+                                    _voxcpm_meta_cache[f"throttled:{base}"] = time.time() + 35.0
+                                raise RuntimeError(f"{base} stream error: {raw_data[:220]}")
+                            if cur_event == "complete" and raw_data and raw_data != "null":
+                                arr = json.loads(raw_data)
+                                first = arr[0] if isinstance(arr, list) and arr else arr
+                                if isinstance(first, dict):
+                                    u = str(first.get("url") or "").strip()
+                                    p = str(first.get("path") or "").strip()
+                                    if u:
+                                        audio_url = u if u.startswith("http") else urljoin(base + "/", u.lstrip("/"))
+                                    elif p:
+                                        audio_url = p if p.startswith("http") else f"{base}{prefix}/file={p}"
+                                elif isinstance(first, str) and first.strip():
+                                    s_val = first.strip()
+                                    audio_url = s_val if s_val.startswith("http") else f"{base}{prefix}/file={s_val}"
+                                break
+                    if audio_url:
+                        break
+        if retried_unauth:
+            continue
+        break
+
+    if not audio_url:
+        raise RuntimeError(f"{base}: لم يُرجع المحرك ملفاً صوتياً")
+
+    r_audio = await _hf_request_with_retry(
+        client,
+        "GET",
+        audio_url,
+        space_url=base,
+        timeout=45.0,
+    )
+    if r_audio.status_code >= 400 or len(r_audio.content or b"") <= 200:
+        raise RuntimeError(f"{base}: تعذر تنزيل المقطع الصوتي ({r_audio.status_code})")
+
+    raw_hdr_mime = (r_audio.headers.get("content-type") or "").split(";")[0].strip().lower()
+    sniffed_mime, _ = _sniff_audio_mime_and_ext(r_audio.content, raw_hdr_mime)
+    media_type = sniffed_mime if sniffed_mime.startswith("audio/") else (raw_hdr_mime if raw_hdr_mime.startswith("audio/") else "audio/wav")
+    return r_audio.content, media_type
+
+
 @app.post("/api/voice/tts")
 async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
-    """Direct Python gateway for openbmb/VoxCPM-Demo Gradio speech synthesis."""
-    text = str(payload.get("text") or "").strip()[:1200]
+    """Resilient Python TTS gateway: primary VoxCPM2 + automatic Voice-Design/Qwen3-TTS multi-Space failover."""
+    text = _clean_tts_text(str(payload.get("text") or ""), max_chars=900)
     if not text:
         raise HTTPException(422, "النص الصوتي فارغ")
     control = str(payload.get("control_instruction") or "").strip()[:400]
+    default_control = control or "Warm, clear, natural conversational voice, steady moderate pace."
     try:
         cfg_value = max(1.0, min(3.0, float(payload.get("cfg_value", 2.0))))
     except (TypeError, ValueError):
@@ -739,125 +935,123 @@ async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...))
         do_normalize = False
 
     ref_b64 = _strip_data_uri_prefix(payload.get("reference_audio_base64") or "")
+    ref_mime_hint = str(payload.get("reference_audio_mime") or "").strip()
 
+    errors: list[str] = []
     try:
-        async with httpx.AsyncClient(timeout=90.0, follow_redirects=True) as client:
-            prefix = str(_voxcpm_meta_cache.get("prefix") or "/gradio_api")
+        async with httpx.AsyncClient(timeout=95.0, follow_redirects=True) as client:
+            now = time.time()
+            voxcpm_throttled = now < float(_voxcpm_meta_cache.get(f"throttled:{VOXCPM_SPACE_URL}") or 0.0)
 
-            ref_file_data = None
-            if ref_b64 and len(ref_b64) < 8_000_000:
-                try:
-                    ref_bytes = base64.b64decode(ref_b64)
-                    up_res = await _hf_request_with_retry(
-                        client,
-                        "POST",
-                        f"{VOXCPM_SPACE_URL}{prefix}/upload",
-                        space_url=VOXCPM_SPACE_URL,
-                        files={"files": ("voice-anchor.wav", ref_bytes, "audio/wav")},
-                        timeout=25.0,
-                    )
-                    if up_res.status_code == 404 and prefix == "/gradio_api":
-                        prefix = ""
-                        up_res = await _hf_request_with_retry(
-                            client,
-                            "POST",
-                            f"{VOXCPM_SPACE_URL}/upload",
-                            space_url=VOXCPM_SPACE_URL,
-                            files={"files": ("voice-anchor.wav", ref_bytes, "audio/wav")},
-                            timeout=25.0,
-                        )
-                    if up_res.status_code == 200:
-                        up_arr = up_res.json()
-                        if isinstance(up_arr, list) and up_arr:
-                            up_path = up_arr[0] if isinstance(up_arr[0], str) else (up_arr[0] or {}).get("path", "")
-                            if up_path:
-                                ref_file_data = {"path": up_path, "meta": {"_type": "gradio.FileData"}}
-                except Exception:
+            # 1) Primary engine: openbmb/VoxCPM-Demo (concurrency-guarded per IP + automatic no-ref retry)
+            if VOXCPM_SPACE_URL and not voxcpm_throttled:
+                async with _voxcpm_sem:
+                    prefix = str(_voxcpm_meta_cache.get("prefix") or "/gradio_api")
                     ref_file_data = None
+                    if ref_b64 and len(ref_b64) < 8_000_000:
+                        try:
+                            ref_bytes = base64.b64decode(ref_b64)
+                            if len(ref_bytes) > 512:
+                                ref_mime, ref_ext = _sniff_audio_mime_and_ext(ref_bytes, ref_mime_hint)
+                                ref_filename = f"voice-anchor.{ref_ext}"
+                                up_res = await _hf_request_with_retry(
+                                    client,
+                                    "POST",
+                                    f"{VOXCPM_SPACE_URL}{prefix}/upload",
+                                    space_url=VOXCPM_SPACE_URL,
+                                    files={"files": (ref_filename, ref_bytes, ref_mime)},
+                                    timeout=22.0,
+                                )
+                                if up_res.status_code == 404 and prefix == "/gradio_api":
+                                    prefix = ""
+                                    up_res = await _hf_request_with_retry(
+                                        client,
+                                        "POST",
+                                        f"{VOXCPM_SPACE_URL}/upload",
+                                        space_url=VOXCPM_SPACE_URL,
+                                        files={"files": (ref_filename, ref_bytes, ref_mime)},
+                                        timeout=22.0,
+                                    )
+                                if up_res.status_code == 200:
+                                    _voxcpm_meta_cache["prefix"] = prefix
+                                    _voxcpm_meta_cache[f"tts_prefix:{VOXCPM_SPACE_URL}"] = prefix
+                                    up_arr = up_res.json()
+                                    if isinstance(up_arr, list) and up_arr:
+                                        up_path = up_arr[0] if isinstance(up_arr[0], str) else (up_arr[0] or {}).get("path", "")
+                                        if up_path:
+                                            ref_file_data = {
+                                                "path": up_path,
+                                                "orig_name": ref_filename,
+                                                "mime_type": ref_mime,
+                                                "meta": {"_type": "gradio.FileData"},
+                                            }
+                        except Exception:
+                            ref_file_data = None
 
-            gradio_data = [
-                text,
-                "" if ref_file_data else control,
-                ref_file_data,
-                False,
-                "",
-                cfg_value,
-                do_normalize,
-                False,
+                    vox_attempts: list[Any] = [ref_file_data] if ref_file_data else [None]
+                    if ref_file_data is not None:
+                        # If reference cloning fails (e.g. clip <1s / >30s / token budget), retry pure Voice Design mode
+                        vox_attempts.append(None)
+
+                    for attempt_ref in vox_attempts:
+                        gradio_data = [
+                            text,
+                            "" if attempt_ref else control,
+                            attempt_ref,
+                            False,
+                            "",
+                            cfg_value,
+                            do_normalize,
+                            False,
+                        ]
+                        try:
+                            audio_bytes, media_type = await _run_gradio_tts_call(
+                                client,
+                                space_url=VOXCPM_SPACE_URL,
+                                endpoint="generate",
+                                gradio_data=gradio_data,
+                            )
+                            return Response(content=audio_bytes, media_type=media_type, headers={"Cache-Control": "no-store"})
+                        except Exception as exc:
+                            errors.append(str(exc)[:180])
+                            if time.time() < float(_voxcpm_meta_cache.get(f"throttled:{VOXCPM_SPACE_URL}") or 0.0):
+                                break
+
+            # 2) Official Qwen3-TTS failover mirrors (Voice-Design HF + MS, then Qwen3-TTS-Demo HF + MS)
+            qwen_voice = _select_qwen3_tts_voice(default_control)
+            tts_fallbacks: list[tuple[str, str, list[Any]]] = [
+                (QWEN3_TTS_VD_SPACE_URL, "tts_interface", [text[:600], default_control]),
+                (QWEN3_TTS_VD_MS_URL, "tts_interface", [text[:600], default_control]),
+                (QWEN3_TTS_DEMO_SPACE_URL, "tts_interface", [text[:600], qwen_voice, "Auto / 自动"]),
+                (QWEN3_TTS_DEMO_MS_URL, "tts_interface", [text[:600], qwen_voice, "Auto / 自动"]),
             ]
-            r_call = await _hf_request_with_retry(
-                client,
-                "POST",
-                f"{VOXCPM_SPACE_URL}{prefix}/call/generate",
-                space_url=VOXCPM_SPACE_URL,
-                json={"data": gradio_data},
-                timeout=25.0,
-            )
-            if r_call.status_code == 404 and prefix == "/gradio_api":
-                prefix = ""
-                r_call = await _hf_request_with_retry(
-                    client,
-                    "POST",
-                    f"{VOXCPM_SPACE_URL}/call/generate",
-                    space_url=VOXCPM_SPACE_URL,
-                    json={"data": gradio_data},
-                    timeout=25.0,
-                )
-            _voxcpm_meta_cache["prefix"] = prefix
-            _voxcpm_meta_cache["ts"] = time.time()
+            healthy_fb = [
+                item for item in tts_fallbacks
+                if item[0] and time.time() >= float(_voxcpm_meta_cache.get(f"throttled:{item[0]}") or 0.0)
+            ]
+            throttled_fb = [item for item in tts_fallbacks if item[0] and item not in healthy_fb]
 
-            call_json = r_call.json() if r_call.content else {}
-            event_id = call_json.get("event_id")
-            if r_call.status_code >= 400 or not event_id:
-                raise HTTPException(502, f"فشل إرسال طلب الصوت إلى VoxCPM ({r_call.status_code})")
+            for fb_url, fb_ep, fb_args in healthy_fb + throttled_fb:
+                try:
+                    audio_bytes, media_type = await _run_gradio_tts_call(
+                        client,
+                        space_url=fb_url,
+                        endpoint=fb_ep,
+                        gradio_data=fb_args,
+                        call_timeout=20.0,
+                        sse_timeout=55.0,
+                    )
+                    return Response(content=audio_bytes, media_type=media_type, headers={"Cache-Control": "no-store"})
+                except Exception as exc:
+                    errors.append(str(exc)[:180])
+                    continue
 
-            audio_url = ""
-            cur_event = ""
-            async with client.stream(
-                "GET",
-                f"{VOXCPM_SPACE_URL}{prefix}/call/generate/{event_id}",
-                headers=_hf_space_headers(VOXCPM_SPACE_URL),
-                timeout=90.0,
-            ) as sse:
-                async for line in sse.aiter_lines():
-                    if line.startswith("event:"):
-                        cur_event = line[6:].strip()
-                    elif line.startswith("data:"):
-                        raw_data = line[5:].strip()
-                        if cur_event == "error":
-                            raise HTTPException(502, f"خطأ من VoxCPM: {raw_data[:240]}")
-                        if cur_event == "complete":
-                            arr = json.loads(raw_data)
-                            first = arr[0] if isinstance(arr, list) and arr else arr
-                            if isinstance(first, dict):
-                                u = str(first.get("url") or "")
-                                p = str(first.get("path") or "")
-                                if u:
-                                    audio_url = u if u.startswith("http") else urljoin(VOXCPM_SPACE_URL + "/", u.lstrip("/"))
-                                elif p:
-                                    audio_url = f"{VOXCPM_SPACE_URL}{prefix}/file={p}"
-                            elif isinstance(first, str):
-                                audio_url = first if first.startswith("http") else f"{VOXCPM_SPACE_URL}{prefix}/file={first}"
-                            break
-            if not audio_url:
-                raise HTTPException(502, "لم يُرجع نموذج VoxCPM ملفاً صوتياً")
-            r_audio = await _hf_request_with_retry(
-                client,
-                "GET",
-                audio_url,
-                space_url=VOXCPM_SPACE_URL,
-                timeout=45.0,
-            )
-            if r_audio.status_code >= 400 or not r_audio.content:
-                raise HTTPException(502, "تعذر تنزيل المقطع الصوتي من VoxCPM")
-            media_type = (r_audio.headers.get("content-type") or "audio/wav").split(";")[0].strip()
-            if not media_type.startswith("audio/"):
-                media_type = "audio/wav"
-            return Response(content=r_audio.content, media_type=media_type, headers={"Cache-Control": "no-store"})
+            err_tail = errors[-1] if errors else "لم يُرجع محرك الصوت مقطعاً صالحاً"
+            raise HTTPException(502, f"تعذر توليد الصوت حالياً: {err_tail[:220]}")
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(502, f"تعذر توليد الصوت عبر VoxCPM: {str(exc)[:240]}") from exc
+        raise HTTPException(502, f"تعذر توليد الصوت عبر الخادم: {str(exc)[:240]}") from exc
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -882,6 +1076,7 @@ def _qwen_gradio_candidates() -> list[str]:
         QWEN_OMNI_SPACE_URL,
         QWEN_MODELSCOPE_MIRROR_URL,
         QWEN3_OMNI_FALLBACK_URL,
+        QWEN25_OMNI_FALLBACK_URL,
         *[u.strip() for u in os.getenv("QWEN_EXTRA_SPACE_URLS", "").split(",") if u.strip()],
     ]:
         cleaned = (raw or "").strip().rstrip("/")
@@ -1137,6 +1332,22 @@ async def _adapt_qwen_data_for_space(
             False,
             False,
         ]
+    if (
+        space_url == QWEN25_OMNI_FALLBACK_URL
+        and space_url not in {QWEN_OMNI_SPACE_URL, QWEN_MODELSCOPE_MIRROR_URL, QWEN3_OMNI_FALLBACK_URL}
+        and len(norm) == 9
+    ):
+        # Qwen/Qwen2.5-Omni-7B-Demo /chat_predict signature (7 positional args):
+        # [text, audio, image, video, history, system_prompt, voice_choice]
+        return [
+            norm[0],
+            audio_fd,
+            image_fd,
+            video_fd,
+            norm[4],
+            norm[5],
+            "Cherry",
+        ]
     return [
         norm[0],
         audio_fd,
@@ -1213,7 +1424,7 @@ def _extract_qwen_assistant_text(payload: Any) -> str | None:
     return None
 
 
-def _extract_omegatech_reply(obj: Any) -> str:
+def _extract_openai_chat_reply(obj: Any) -> str:
     if not isinstance(obj, dict):
         return ""
     choices = obj.get("choices")
@@ -1221,60 +1432,7 @@ def _extract_omegatech_reply(obj: Any) -> str:
         msg = (choices[0] or {}).get("message") if isinstance(choices[0], dict) else None
         if isinstance(msg, dict) and isinstance(msg.get("content"), str) and msg["content"].strip():
             return msg["content"].strip()
-    for path in (
-        ("data", "reply"),
-        ("data", "response"),
-        ("data", "answer"),
-        ("data", "result"),
-        ("data", "message"),
-        ("data", "text"),
-        ("reply",),
-        ("response",),
-        ("result",),
-        ("answer",),
-        ("message",),
-        ("text",),
-        ("content",),
-    ):
-        cur: Any = obj
-        ok = True
-        for k in path:
-            if isinstance(cur, dict) and k in cur:
-                cur = cur[k]
-            else:
-                ok = False
-                break
-        if ok and isinstance(cur, str) and cur.strip():
-            return cur.strip()
     return ""
-
-
-def _trim_to_encoded_bytes(text: str, max_encoded_bytes: int = 4600) -> str:
-    """Ensure a string stays safely under HTTP GET query-string byte limits even for Arabic UTF-8."""
-    val = (text or "").strip()
-    if len(quote(val, safe="")) <= max_encoded_bytes:
-        return val
-    lo, hi = 0, len(val)
-    best = ""
-    while lo <= hi:
-        mid = (lo + hi) // 2
-        cand = val[-mid:] if mid > 0 else ""
-        if len(quote(cand, safe="")) <= max_encoded_bytes:
-            best = cand
-            lo = mid + 1
-        else:
-            hi = mid - 1
-    return best.strip() or val[:400]
-
-
-def _compact_system_prompt(sys_prompt: str, max_chars: int = 8000) -> str:
-    """Keep both the core identity opening and the tool/file tail of buildSystem()."""
-    s = (sys_prompt or "").strip()
-    if len(s) <= max_chars:
-        return s
-    head_len = max_chars // 2
-    tail_len = max_chars - head_len - 16
-    return s[:head_len].rstrip() + "\n\n...\n\n" + s[-tail_len:].lstrip()
 
 
 async def _dashscope_qwen35_direct(
@@ -1323,97 +1481,7 @@ async def _dashscope_qwen35_direct(
     )
     if res.status_code >= 400:
         return None
-    return _extract_omegatech_reply(res.json()) or None
-
-
-async def _omegatech_chat_fallback(client: httpx.AsyncClient, data: list[Any]) -> str:
-    """Free non-Gradio fallback (POST OpenAI-compatible + byte-safe GET Omegatech) when all Gradio mirrors fail."""
-    norm = _normalize_qwen_chat_predict_args(data)
-    user_text = str(norm[0] or "").strip() if len(norm) > 0 else ""
-    has_binary_only = not user_text and any(bool(norm[idx]) for idx in (1, 2, 3) if len(norm) > idx)
-    if has_binary_only:
-        raise RuntimeError("المرفق الصوتي أو المرئي يتطلب محرك الوسائط المتعددة المشغول حالياً — أعد المحاولة بعد ثوانٍ")
-
-    history = norm[4] if len(norm) > 4 and isinstance(norm[4], list) else []
-    sys_prompt = str(norm[5] or "").strip() if len(norm) > 5 else ""
-    temp = float(norm[6]) if len(norm) > 6 else 0.7
-    if len(sys_prompt) > 20000 and "WINDOWS 12 BUILT-IN DESIGN MODE" in sys_prompt:
-        raise RuntimeError("محرك تصميم Windows 12 مشغول مؤقتاً — أعد المحاولة بعد لحظات")
-
-    last_err = "unknown"
-
-    # 1) POST JSON OpenAI-compatible fallback (no GET URL length ceiling; preserves tool/file system instructions)
-    if POLLINATIONS_OPENAI_URL:
-        try:
-            oa_messages: list[dict[str, str]] = []
-            if sys_prompt:
-                oa_messages.append({"role": "system", "content": _compact_system_prompt(sys_prompt, 12000)})
-            for item in history[-12:]:
-                if isinstance(item, dict):
-                    r_role = "assistant" if item.get("role") == "assistant" else "user"
-                    cnt = str(item.get("content") or "").strip()
-                    if cnt:
-                        oa_messages.append({"role": r_role, "content": cnt[:2400]})
-            if user_text:
-                oa_messages.append({"role": "user", "content": user_text[:6000]})
-            if oa_messages:
-                r_post = await client.post(
-                    POLLINATIONS_OPENAI_URL,
-                    headers={
-                        "User-Agent": _DEFAULT_OUTBOUND_HEADERS["User-Agent"],
-                        "Content-Type": "application/json",
-                        "Accept": "application/json",
-                    },
-                    json={
-                        "model": "openai-fast",
-                        "messages": oa_messages,
-                        "temperature": min(1.5, max(0.1, temp)),
-                    },
-                    timeout=65.0,
-                )
-                if r_post.status_code < 400:
-                    post_reply = _extract_omegatech_reply(r_post.json())
-                    if post_reply:
-                        return post_reply
-                else:
-                    last_err = f"POST HTTP {r_post.status_code}"
-        except Exception as exc:
-            last_err = str(exc)[:160]
-
-    # 2) Byte-safe (<4.6 KB URL-encoded) GET fallback via api.omegatech.app so HTTP 414 never occurs on Arabic text
-    parts: list[str] = []
-    if sys_prompt:
-        parts.append("[System]\n" + _compact_system_prompt(sys_prompt, 900))
-    recent_turns: list[str] = []
-    for item in history[-4:]:
-        if isinstance(item, dict):
-            role = "Assistant" if item.get("role") == "assistant" else "User"
-            cnt = str(item.get("content") or "").strip()
-            if cnt:
-                recent_turns.append(f"{role}: {cnt[:280]}")
-    if recent_turns:
-        parts.append("[History]\n" + "\n".join(recent_turns)[-700:])
-    if user_text:
-        parts.append("[User]\n" + user_text[:1200])
-    composite = _trim_to_encoded_bytes("\n\n".join(parts).strip() or "Hello", max_encoded_bytes=4500)
-
-    providers = [
-        (f"{OMEGATECH_AI_BASE_URL}/Deep-ai", {"action": "chat", "message": composite, "model": "deepseek-v3.2"}),
-        (f"{OMEGATECH_AI_BASE_URL}/Gemini2", {"action": "chat", "message": composite}),
-        (f"{OMEGATECH_AI_BASE_URL}/Chatgpt-v2", {"action": "chat", "message": composite}),
-    ]
-    for endpoint_url, params in providers:
-        try:
-            res = await client.get(endpoint_url, params=params, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=65.0)
-            if res.status_code >= 400:
-                last_err = f"HTTP {res.status_code}"
-                continue
-            reply = _extract_omegatech_reply(res.json())
-            if reply:
-                return reply
-        except Exception as exc:
-            last_err = str(exc)[:160]
-    raise RuntimeError(f"تعذر الحصول على رد من جميع محركات المحادثة ({last_err})")
+    return _extract_openai_chat_reply(res.json()) or None
 
 
 @app.get("/api/models/qwen/info")
@@ -1625,25 +1693,7 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
                     errors.append(f"{space_url}: {str(exc)[:160]}")
                     continue
 
-            # Final emergency fallback (POST OpenAI-compatible + byte-safe Omegatech) if all Qwen Gradio mirrors fail
-            try:
-                yield b": fallback\n\n"
-                reply = await _omegatech_chat_fallback(client, data)
-                norm = _normalize_qwen_chat_predict_args(data)
-                in_hist = list(norm[4]) if len(norm) > 4 and isinstance(norm[4], list) else []
-                user_msg = str(norm[0] or "") if len(norm) > 0 else ""
-                if user_msg:
-                    in_hist.append({"role": "user", "content": user_msg})
-                in_hist.append({"role": "assistant", "content": reply})
-                frame = json.dumps([None, None, None, None, in_hist], ensure_ascii=False)
-                yield f"event: generating\ndata: {frame}\n\nevent: complete\ndata: {frame}\n\n".encode("utf-8")
-                return
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                errors.append(str(exc)[:180])
-
-        err_summary = errors[-1] if errors else "تعذر الاتصال بمحرك المحادثة"
+        err_summary = errors[-1] if errors else "تعذر الاتصال بمحركات Qwen"
         yield f"event: error\ndata: {json.dumps({'message': err_summary}, ensure_ascii=False)}\n\n".encode("utf-8")
 
     return StreamingResponse(
@@ -1723,13 +1773,7 @@ async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...))
                 errors.append(str(exc)[:160])
                 continue
 
-        try:
-            reply = await _omegatech_chat_fallback(client, data)
-            return {"ok": True, "text": reply}
-        except Exception as exc:
-            errors.append(str(exc)[:180])
-
-    raise HTTPException(502, f"تعذر إتمام الطلب عبر الخادم: {(errors[-1] if errors else 'unknown')[:220]}")
+    raise HTTPException(502, f"تعذر إتمام الطلب عبر محركات Qwen: {(errors[-1] if errors else 'unknown')[:220]}")
 
 
 async def _decode_upstream_image_response(client: httpx.AsyncClient, r: httpx.Response) -> tuple[bytes, str]:
