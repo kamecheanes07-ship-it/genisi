@@ -5488,7 +5488,22 @@ async function runMedia(name, args, phase){
   if (name === 'music_gen') return runStepAudioMusic(args, prompt, phase);
   const kind = MEDIA_KIND[name], enc = encodeURIComponent;
   phase(1);
-  prompt = (await refineMediaPrompt(name, prompt, args)).slice(0, name === 'video_gen' ? 1100 : name === 'image_edit' ? 900 : 1800);
+  const rawRefined = await refineMediaPrompt(name, prompt, args);
+  const maxPromptLen = name === 'video_gen' ? 950 : name === 'image_edit' ? 900 : 1800;
+  if (rawRefined.length <= maxPromptLen){
+    prompt = rawRefined;
+  } else {
+    const cut = rawRefined.slice(0, maxPromptLen);
+    let trimmed = '';
+    for (const sep of ['. ', ', ', '; ', ' ']){
+      const idx = cut.lastIndexOf(sep);
+      if (idx >= Math.floor(maxPromptLen * 0.65)){
+        trimmed = cut.slice(0, idx).replace(/[\s,;]+$/, '') + (sep === '. ' ? '.' : '');
+        break;
+      }
+    }
+    prompt = trimmed || cut.trim();
+  }
   try { console.log('[media prompt]', name, prompt); } catch(e){}
   /* ---- توليد صورة عبر خادم البايثون مباشرة ---- */
   if (name === 'image_gen'){

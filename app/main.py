@@ -49,18 +49,9 @@ STEPAUDIO_MUSIC_SPACE_URL = os.getenv("STEPAUDIO_MUSIC_SPACE_URL", "https://step
 VOXCPM_SPACE_URL = os.getenv("VOXCPM_SPACE_URL", "https://openbmb-voxcpm-demo.hf.space").rstrip("/")
 IMAGE_API_BASE_URL = os.getenv("IMAGE_API_BASE_URL", "https://prexzyapis.com").rstrip("/")
 VIDEO_API_URL = os.getenv("VIDEO_API_URL", "https://api.omegatech.app/api/ai/Txt2video").strip()
-VIDEO_GRADIO_SPACES = [
-    s.strip().rstrip("/")
-    for s in os.getenv(
-        "VIDEO_GRADIO_SPACES",
-        "https://lightricks-ltx-video-distilled.hf.space,https://deeprat-ltx-video-zerogpu-optimized.hf.space",
-    ).split(",")
-    if s.strip()
-]
 _qwen_meta_cache: dict[str, Any] = {"ts": 0.0, "prefix": None, "endpoints": None}
 _music_schema_cache: dict[str, Any] = {"ts": 0.0, "submit_props": None}
 _voxcpm_meta_cache: dict[str, Any] = {"ts": 0.0, "prefix": None}
-_video_schema_cache: dict[str, tuple[float, str, list[dict[str, Any]]]] = {}
 _video_jobs: dict[str, dict[str, Any]] = {}
 _video_tasks: dict[str, asyncio.Task[Any]] = {}
 _cleanup_task: asyncio.Task[Any] | None = None
@@ -498,7 +489,6 @@ def _strip_data_uri_prefix(raw: str) -> str:
 @app.post("/api/music/submit")
 async def music_submit(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Direct Python gateway for stepfun-ai/StepAudio-3-Music using its official step-music contract."""
-    _rate_limit("music-submit:" + _sha(_client_ip(request)), 20, 300)
     task = str(payload.get("task") or "text_to_music").strip().lower()
     if task not in {"text_to_music", "vocal_to_music", "music_cover"}:
         task = "text_to_music"
@@ -572,7 +562,6 @@ async def music_submit(request: Request, payload: dict[str, Any] = Body(...)) ->
 @app.post("/api/music/query")
 async def music_query(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Poll music generation status from stepfun-ai/StepAudio-3-Music."""
-    _rate_limit("music-query:" + _sha(_client_ip(request)), 180, 300)
     task_id = str(payload.get("task_id") or payload.get("id") or "").strip()[:160]
     if not task_id:
         raise HTTPException(422, "معرّف المهمة task_id مطلوب")
@@ -594,7 +583,6 @@ async def music_query(request: Request, payload: dict[str, Any] = Body(...)) -> 
 @app.post("/api/voice/tts")
 async def voice_tts_proxy(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
     """Direct Python gateway for openbmb/VoxCPM-Demo Gradio speech synthesis."""
-    _rate_limit("voice-tts:" + _sha(_client_ip(request)), 45, 300)
     text = str(payload.get("text") or "").strip()[:1200]
     if not text:
         raise HTTPException(422, "النص الصوتي فارغ")
@@ -788,7 +776,6 @@ def _extract_qwen_assistant_text(payload: Any) -> str | None:
 @app.get("/api/models/qwen/info")
 async def qwen_model_info(request: Request, endpoint: str = "chat_predict") -> dict[str, Any]:
     """Check Qwen3.5-Omni health and return Gradio endpoint metadata via Python."""
-    _rate_limit("qwen-info:" + _sha(_client_ip(request)), 60, 300)
     async with httpx.AsyncClient(timeout=18.0, follow_redirects=True) as client:
         prefix, chosen, schema = await _discover_qwen_gradio(client, endpoint)
         return {
@@ -807,7 +794,6 @@ async def qwen_model_upload(
     mime: str = "application/octet-stream",
 ) -> dict[str, Any]:
     """Upload a multimodal attachment directly from Python to Qwen3.5-Omni (no browser CORS calls)."""
-    _rate_limit("qwen-upload:" + _sha(_client_ip(request)), 45, 300)
     raw = await request.body()
     if not raw:
         raise HTTPException(400, "الملف المرفق فارغ")
@@ -847,7 +833,6 @@ async def qwen_model_upload(
 @app.post("/api/models/qwen/stream")
 async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...)) -> StreamingResponse:
     """Stream Qwen3.5-Omni Gradio SSE directly through Python with native CORS headers."""
-    _rate_limit("qwen-stream:" + _sha(_client_ip(request)), 90, 300)
     data = payload.get("data")
     if not isinstance(data, list):
         raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
@@ -900,7 +885,6 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
 @app.post("/api/models/qwen/once")
 async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Single-turn non-streaming Qwen3.5-Omni call via Python (used for prompt refinement & titles)."""
-    _rate_limit("qwen-once:" + _sha(_client_ip(request)), 90, 300)
     data = payload.get("data")
     if not isinstance(data, list):
         raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
@@ -996,7 +980,6 @@ async def _decode_upstream_image_response(client: httpx.AsyncClient, r: httpx.Re
 @app.post("/api/models/image/generate")
 async def model_image_generate(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
     """Generate an image directly from Python without any third-party proxy."""
-    _rate_limit("img-gen:" + _sha(_client_ip(request)), 30, 300)
     prompt = str(payload.get("prompt") or "").strip()[:1800]
     if not prompt:
         raise HTTPException(422, "وصف الصورة مطلوب")
@@ -1024,7 +1007,6 @@ async def model_image_generate(request: Request, payload: dict[str, Any] = Body(
 @app.post("/api/models/image/edit")
 async def model_image_edit(request: Request, payload: dict[str, Any] = Body(...)) -> Response:
     """Edit an image directly from Python without any third-party proxy."""
-    _rate_limit("img-edit:" + _sha(_client_ip(request)), 25, 300)
     prompt = str(payload.get("prompt") or "").strip()[:1200]
     if not prompt:
         raise HTTPException(422, "تعليمات تعديل الصورة مطلوبة")
@@ -1105,131 +1087,23 @@ def _prune_video_jobs() -> None:
             _video_jobs[old_tid].pop("bytes", None)
 
 
-def _video_dims_for_ratio(ratio: str) -> tuple[int, int]:
-    # Multiples of 32 within LTX-Video [256, 1280] slider bounds
-    mapping = {
-        "16:9": (512, 896),
-        "auto": (512, 896),
-        "9:16": (896, 512),
-        "1:1": (640, 640),
-        "4:3": (576, 768),
-        "3:4": (768, 576),
-    }
-    return mapping.get(ratio, (512, 896))
-
-
-async def _discover_video_space(client: httpx.AsyncClient, space_url: str) -> tuple[str, list[dict[str, Any]]]:
-    now = time.time()
-    cached = _video_schema_cache.get(space_url)
-    if cached and now - cached[0] < 3600:
-        return cached[1], cached[2]
-    for prefix in ("/gradio_api", ""):
-        r = await client.get(f"{space_url}{prefix}/info", timeout=15.0)
-        if r.status_code != 200:
-            continue
-        info = r.json()
-        named = info.get("named_endpoints") or {}
-        ep = named.get("/text_to_video") or named.get("text_to_video")
-        if isinstance(ep, dict):
-            params = ep.get("parameters")
-            if isinstance(params, list) and params:
-                _video_schema_cache[space_url] = (now, prefix, params)
-                return prefix, params
-    raise RuntimeError(f"تعذر اكتشاف واجهة text_to_video في {space_url}")
-
-
-async def _generate_video_via_gradio_space(
-    space_url: str,
-    prompt: str,
-    ratio: str,
-    auth_token: str | None = None,
-) -> bytes:
-    height_ui, width_ui = _video_dims_for_ratio(ratio)
-    headers = dict(_DEFAULT_OUTBOUND_HEADERS)
-    if auth_token and space_url.endswith(".hf.space"):
-        headers["Authorization"] = f"Bearer {auth_token}"
-
-    async with httpx.AsyncClient(timeout=240.0, follow_redirects=True) as client:
-        prefix, params = await _discover_video_space(client, space_url)
-        values_by_name: dict[str, Any] = {
-            "prompt": prompt[:1000],
-            "negative_prompt": "worst quality, inconsistent motion, blurry, jittery, distorted, watermark, text",
-            "input_image_filepath": None,
-            "input_video_filepath": None,
-            "height_ui": height_ui,
-            "width_ui": width_ui,
-            "mode": "text-to-video",
-            "duration_ui": 3.5,
-            "ui_frames_to_use": 9,
-            "seed_ui": random.randint(1, 2147483647),
-            "randomize_seed": True,
-            "ui_guidance_scale": 3.0,
-            "improve_texture_flag": True,
-            "slow_motion_flag": False,
-        }
-        call_data = [
-            values_by_name.get(str(p.get("parameter_name") or ""), p.get("parameter_default"))
-            for p in params
-        ]
-        r_call = await client.post(
-            f"{space_url}{prefix}/call/text_to_video",
-            headers={**headers, "Content-Type": "application/json"},
-            json={"data": call_data},
-            timeout=30.0,
-        )
-        if r_call.status_code >= 400:
-            raise RuntimeError(f"{space_url} HTTP {r_call.status_code}: {(r_call.text or '')[:180]}")
-        event_id = (r_call.json() or {}).get("event_id")
-        if not event_id:
-            raise RuntimeError(f"{space_url} missing event_id")
-
-        video_url = ""
-        async with client.stream(
-            "GET",
-            f"{space_url}{prefix}/call/text_to_video/{event_id}",
-            headers=headers,
-            timeout=220.0,
-        ) as stream_res:
-            if stream_res.status_code >= 400:
-                raise RuntimeError(f"{space_url} stream HTTP {stream_res.status_code}")
-            cur_event = ""
-            async for line in stream_res.aiter_lines():
-                line = line.strip()
-                if not line:
-                    continue
-                if line.startswith("event:"):
-                    cur_event = line[6:].strip()
-                elif line.startswith("data:"):
-                    raw_data = line[5:].strip()
-                    if cur_event == "error":
-                        raise RuntimeError(f"{space_url} error: {raw_data[:200]}")
-                    if cur_event == "complete":
-                        parsed = json.loads(raw_data)
-                        first = parsed[0] if isinstance(parsed, list) and parsed else parsed
-                        if isinstance(first, dict):
-                            vid_obj = first.get("video") if isinstance(first.get("video"), dict) else first
-                            u = vid_obj.get("url") or ""
-                            p = vid_obj.get("path") or ""
-                            if u:
-                                video_url = u if u.startswith("http") else f"{space_url}{u}"
-                            elif p:
-                                video_url = p if p.startswith("http") else f"{space_url}{prefix}/file={p}"
-                        elif isinstance(first, str):
-                            video_url = first if first.startswith("http") else f"{space_url}{prefix}/file={first}"
-                        break
-        if not video_url:
-            raise RuntimeError(f"{space_url} returned no video file")
-        dl = await client.get(video_url, headers=headers, timeout=90.0)
-        if dl.status_code >= 400 or not _sniff_video_mp4(dl.content, dl.headers.get("content-type", "")):
-            raise RuntimeError(f"تعذر تنزيل ملف الفيديو من {space_url}")
-        return dl.content
+def _trim_prompt_cleanly(prompt: str, max_len: int = 950) -> str:
+    s = re.sub(r"\s+", " ", (prompt or "").strip())
+    if len(s) <= max_len:
+        return s
+    cut = s[:max_len]
+    for sep in (". ", ", ", "; ", " "):
+        idx = cut.rfind(sep)
+        if idx >= int(max_len * 0.65):
+            return cut[:idx].rstrip(" ,;.") + ("." if sep == ". " else "")
+    return cut.rstrip()
 
 
 def _extract_video_url_from_json(obj: Any) -> str:
     if isinstance(obj, str):
         s = obj.strip()
         if s.startswith(("http://", "https://")) and (
-            re.search(r"\.(mp4|webm|mov)(\?|$)", s, re.I) or "video" in s.lower()
+            re.search(r"\.(mp4|webm|mov)(\?|$)", s, re.I) or "video" in s.lower() or "generated/" in s.lower()
         ):
             return re.sub(r"^http://", "https://", s, flags=re.I)
         return ""
@@ -1240,7 +1114,8 @@ def _extract_video_url_from_json(obj: Any) -> str:
                 return got
         return ""
     if isinstance(obj, dict):
-        for key in ("video_url", "videoUrl", "video", "output_url", "mp4", "url", "result", "data", "output"):
+        # Prioritize data.videoUrl (exact Omegatech Txt2video contract) and standard video keys
+        for key in ("videoUrl", "video_url", "video", "output_url", "mp4", "url", "data", "result", "output"):
             if key in obj:
                 val = obj[key]
                 if isinstance(val, str) and val.strip().startswith(("http://", "https://")):
@@ -1252,163 +1127,174 @@ def _extract_video_url_from_json(obj: Any) -> str:
 
 
 async def _generate_video_via_rest_api(prompt: str, ratio: str, sound: bool) -> tuple[bytes | None, str]:
+    """Call free unlimited Txt2video API directly from Python with generous timeout and clean retry."""
     if not VIDEO_API_URL:
         raise RuntimeError("VIDEO_API_URL unconfigured")
-    norm_ratio = "16:9" if ratio == "auto" else ratio
-    async with httpx.AsyncClient(timeout=150.0, follow_redirects=True) as client:
-        r = await client.get(
-            VIDEO_API_URL,
-            params={
-                "action": "generate",
-                "prompt": prompt[:1000],
-                "ratio": norm_ratio,
-                "sound": "true" if sound else "false",
-            },
-            headers=_DEFAULT_OUTBOUND_HEADERS,
-        )
-        if r.status_code < 400 and _sniff_video_mp4(r.content, r.headers.get("content-type", "")):
-            return r.content, "video/mp4"
-        text = r.text or ""
-        try:
-            data = r.json()
-        except Exception:
-            data = None
-        if r.status_code >= 400 or (
-            isinstance(data, dict)
-            and (data.get("status") is False or (data.get("statusCode") and int(data["statusCode"]) != 200))
-        ):
-            msg = str((data or {}).get("message") or (data or {}).get("error") or f"HTTP {r.status_code}")
-            raise RuntimeError(msg[:220])
+    clean_ratio = ratio if ratio in {"auto", "1:1", "16:9", "9:16", "4:3", "3:4"} else "auto"
+    sound_str = "true" if sound else "false"
+    prompt_variants = [_trim_prompt_cleanly(prompt, 950)]
+    if len(prompt_variants[0]) > 520:
+        prompt_variants.append(_trim_prompt_cleanly(prompt, 500))
 
-        direct_url = _extract_video_url_from_json(data) if data is not None else ""
-        if not direct_url:
-            m = re.search(r"https?://[^\s\"'<>]+", text)
-            if m:
-                direct_url = re.sub(r"^http://", "https://", m.group(0), flags=re.I)
-        if direct_url:
-            dl = await client.get(direct_url, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=60.0)
-            if dl.status_code < 400 and _sniff_video_mp4(dl.content, dl.headers.get("content-type", "")):
-                return dl.content, "video/mp4"
-            return None, direct_url
-
-        nested = (data or {}).get("data") if isinstance(data, dict) else {}
-        if not isinstance(nested, dict):
-            nested = {}
-        task_key = str(
-            (data or {}).get("task_id")
-            or (data or {}).get("taskId")
-            or (data or {}).get("request_id")
-            or (data or {}).get("id")
-            or nested.get("taskKey")
-            or nested.get("task_key")
-            or nested.get("task_id")
-            or nested.get("id")
-            or ""
-        ).strip()
-        if not task_key:
-            raise RuntimeError("لم تُرجع خدمة الفيديو رابطاً أو معرّف مهمة")
-
-        base_root = VIDEO_API_URL.rsplit("/", 1)[0]
-        deadline = time.time() + 180.0
-        while time.time() < deadline:
-            await asyncio.sleep(4.0)
-            for poll_url, poll_params in (
-                (f"{base_root}/txt2video-status", {"task_key": task_key}),
-                (VIDEO_API_URL, {"action": "status", "task_id": task_key, "id": task_key}),
-            ):
+    last_err = "تعذر الاتصال بخدمة الفيديو"
+    req_timeout = httpx.Timeout(connect=25.0, read=300.0, write=30.0, pool=30.0)
+    async with httpx.AsyncClient(timeout=req_timeout, follow_redirects=True) as client:
+        for attempt_idx, cur_prompt in enumerate(prompt_variants):
+            try:
+                r = await client.get(
+                    VIDEO_API_URL,
+                    params={
+                        "action": "generate",
+                        "prompt": cur_prompt,
+                        "ratio": clean_ratio,
+                        "sound": sound_str,
+                    },
+                    headers=_DEFAULT_OUTBOUND_HEADERS,
+                )
+                if r.status_code < 400 and _sniff_video_mp4(r.content, r.headers.get("content-type", "")):
+                    return r.content, ""
+                text = r.text or ""
                 try:
-                    sr = await client.get(poll_url, params=poll_params, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=25.0)
-                    if sr.status_code >= 400:
-                        continue
-                    if _sniff_video_mp4(sr.content, sr.headers.get("content-type", "")):
-                        return sr.content, "video/mp4"
-                    sj = sr.json()
-                    st = str(
-                        sj.get("status")
-                        or (sj.get("data") or {}).get("status")
-                        or ""
-                    ).lower()
-                    if st in {"failed", "error", "cancelled", "canceled"}:
-                        raise RuntimeError(str(sj.get("message") or sj.get("error") or "فشل توليد الفيديو"))
-                    found = _extract_video_url_from_json(sj)
-                    if found:
-                        dl = await client.get(found, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=60.0)
-                        if dl.status_code < 400 and _sniff_video_mp4(dl.content, dl.headers.get("content-type", "")):
-                            return dl.content, "video/mp4"
-                        return None, found
-                except RuntimeError:
-                    raise
+                    data = r.json()
                 except Exception:
+                    data = None
+
+                if r.status_code >= 400 or (
+                    isinstance(data, dict)
+                    and (
+                        data.get("status") is False
+                        or data.get("success") is False
+                        or (data.get("statusCode") and int(data["statusCode"]) != 200)
+                    )
+                ):
+                    msg = str((data or {}).get("message") or (data or {}).get("error") or f"HTTP {r.status_code}")
+                    last_err = msg[:220]
+                    if attempt_idx + 1 < len(prompt_variants):
+                        await asyncio.sleep(1.5)
+                        continue
+                    raise RuntimeError(last_err)
+
+                direct_url = _extract_video_url_from_json(data) if data is not None else ""
+                if not direct_url:
+                    m = re.search(r"https?://[^\s\"'<>]+", text)
+                    if m:
+                        direct_url = re.sub(r"^http://", "https://", m.group(0), flags=re.I)
+                if direct_url:
+                    # Try caching MP4 bytes in Python for same-origin Range playback & encrypted DB sync;
+                    # if upstream CDN prefers direct browser access, fall back seamlessly to direct_url.
+                    try:
+                        dl = await client.get(direct_url, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=60.0)
+                        if dl.status_code < 400 and _sniff_video_mp4(dl.content, dl.headers.get("content-type", "")):
+                            return dl.content, direct_url
+                    except Exception:
+                        pass
+                    return None, direct_url
+
+                nested = (data or {}).get("data") if isinstance(data, dict) else {}
+                if not isinstance(nested, dict):
+                    nested = {}
+                task_key = str(
+                    (data or {}).get("task_id")
+                    or (data or {}).get("taskId")
+                    or (data or {}).get("request_id")
+                    or (data or {}).get("id")
+                    or nested.get("taskKey")
+                    or nested.get("task_key")
+                    or nested.get("task_id")
+                    or nested.get("id")
+                    or ""
+                ).strip()
+                if not task_key:
+                    last_err = "لم تُرجع خدمة الفيديو رابط videoUrl صالحاً"
+                    if attempt_idx + 1 < len(prompt_variants):
+                        await asyncio.sleep(1.5)
+                        continue
+                    raise RuntimeError(last_err)
+
+                base_root = VIDEO_API_URL.rsplit("/", 1)[0]
+                deadline = time.time() + 240.0
+                while time.time() < deadline:
+                    await asyncio.sleep(4.0)
+                    for poll_url, poll_params in (
+                        (f"{base_root}/txt2video-status", {"task_key": task_key}),
+                        (VIDEO_API_URL, {"action": "status", "task_id": task_key, "id": task_key}),
+                    ):
+                        try:
+                            sr = await client.get(poll_url, params=poll_params, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=30.0)
+                            if sr.status_code >= 400:
+                                continue
+                            if _sniff_video_mp4(sr.content, sr.headers.get("content-type", "")):
+                                return sr.content, ""
+                            sj = sr.json()
+                            st = str(sj.get("status") or (sj.get("data") or {}).get("status") or "").lower()
+                            if st in {"failed", "error", "cancelled", "canceled"}:
+                                raise RuntimeError(str(sj.get("message") or sj.get("error") or "فشل توليد الفيديو"))
+                            found = _extract_video_url_from_json(sj)
+                            if found:
+                                try:
+                                    dl = await client.get(found, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=60.0)
+                                    if dl.status_code < 400 and _sniff_video_mp4(dl.content, dl.headers.get("content-type", "")):
+                                        return dl.content, found
+                                except Exception:
+                                    pass
+                                return None, found
+                        except RuntimeError:
+                            raise
+                        except Exception:
+                            continue
+                raise RuntimeError("انتهت مهلة انتظار توليد الفيديو")
+            except Exception as exc:
+                last_err = str(exc)[:220]
+                if attempt_idx + 1 < len(prompt_variants):
+                    await asyncio.sleep(1.5)
                     continue
-        raise RuntimeError("انتهت مهلة انتظار توليد الفيديو")
+                raise RuntimeError(last_err) from exc
+    raise RuntimeError(last_err)
 
 
 async def _execute_video_job(task_id: str, prompt: str, ratio: str, sound: bool) -> None:
     job = _video_jobs.get(task_id)
     if not job:
         return
-    errors: list[str] = []
-    hf_tok = (os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or "").strip() or None
-
-    # 1) Primary & secondary ZeroGPU LTX-Video Spaces on Hugging Face (fast ~15-35s, real 30fps MP4)
-    for space_url in VIDEO_GRADIO_SPACES:
-        auth_attempts = [hf_tok, None] if hf_tok else [None]
-        for tok in auth_attempts:
-            try:
-                job["step"] = "generating"
-                mp4_bytes = await _generate_video_via_gradio_space(space_url, prompt, ratio, auth_token=tok)
-                job.update(
-                    {
-                        "status": "succeeded",
-                        "bytes": mp4_bytes,
-                        "mime": "video/mp4",
-                        "video_url": f"/api/models/video/file/{task_id}",
-                        "ts": time.time(),
-                    }
-                )
-                return
-            except Exception as exc:
-                err_txt = str(exc)[:200]
-                errors.append(err_txt)
-                # Only retry same space without token if token auth/quota caused failure
-                if tok is not None and any(k in err_txt.lower() for k in ("401", "403", "quota", "token", "auth")):
-                    continue
-                break
-
-    # 2) Fallback direct REST video provider (if online)
     try:
-        mp4_bytes, url_or_mime = await _generate_video_via_rest_api(prompt, ratio, sound)
+        job["step"] = "generating"
+        mp4_bytes, remote_url = await _generate_video_via_rest_api(prompt, ratio, sound)
         if mp4_bytes:
             job.update(
                 {
                     "status": "succeeded",
                     "bytes": mp4_bytes,
-                    "mime": url_or_mime or "video/mp4",
+                    "mime": "video/mp4",
                     "video_url": f"/api/models/video/file/{task_id}",
+                    "remote_url": remote_url or None,
                     "ts": time.time(),
                 }
             )
             return
-        if url_or_mime.startswith("https://"):
-            job.update({"status": "succeeded", "video_url": url_or_mime, "ts": time.time()})
+        if remote_url.startswith("https://"):
+            job.update(
+                {
+                    "status": "succeeded",
+                    "video_url": remote_url,
+                    "remote_url": remote_url,
+                    "ts": time.time(),
+                }
+            )
             return
+        raise RuntimeError("لم يتم استلام رابط فيديو صالح")
     except Exception as exc:
-        errors.append(str(exc)[:200])
-
-    summary = errors[-1] if errors else "الخدمة مشغولة حالياً"
-    job.update(
-        {
-            "status": "failed",
-            "error": f"تعذر توليد الفيديو حالياً ({summary}) — يرجى إعادة المحاولة بعد لحظات.",
-            "ts": time.time(),
-        }
-    )
+        job.update(
+            {
+                "status": "failed",
+                "error": f"تعذر توليد الفيديو حالياً ({str(exc)[:200]}) — يرجى إعادة المحاولة.",
+                "ts": time.time(),
+            }
+        )
 
 
 @app.post("/api/models/video/submit")
 async def model_video_submit(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Queue a video generation job asynchronously in Python (returns immediately, zero 502 timeouts)."""
-    _rate_limit("vid-submit:" + _sha(_client_ip(request)), 20, 300)
+    """Queue an unlimited free Txt2video job asynchronously in Python (returns in <5ms so HF Space never hits 502)."""
     prompt = str(payload.get("prompt") or "").strip()[:1200]
     if not prompt:
         raise HTTPException(422, "وصف الفيديو مطلوب")
@@ -1433,8 +1319,7 @@ async def model_video_submit(request: Request, payload: dict[str, Any] = Body(..
 
 @app.post("/api/models/video/status")
 async def model_video_status(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Poll asynchronous video generation task status from Python."""
-    _rate_limit("vid-status:" + _sha(_client_ip(request)), 240, 300)
+    """Poll asynchronous video generation task status from Python (unlimited, zero proxy)."""
     task_id = str(payload.get("task_id") or payload.get("id") or "").strip()[:160]
     if not task_id:
         raise HTTPException(422, "معرّف مهمة الفيديو مطلوب")
@@ -1448,6 +1333,7 @@ async def model_video_status(request: Request, payload: dict[str, Any] = Body(..
                 "status": "SUCCEEDED",
                 "task_id": task_id,
                 "video_url": job.get("video_url") or f"/api/models/video/file/{task_id}",
+                "remote_url": job.get("remote_url"),
             }
         if st == "failed":
             return {
@@ -1583,7 +1469,6 @@ def _parse_ddg_html(raw_html: str) -> list[dict[str, str]]:
 @app.post("/api/tools/web-search")
 async def tool_web_search_python(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Run web search directly from Python without browser CORS proxies."""
-    _rate_limit("web-search:" + _sha(_client_ip(request)), 45, 300)
     query = str(payload.get("query") or "").strip()[:400]
     if not query:
         raise HTTPException(422, "عبارة البحث مطلوبة")
@@ -1607,7 +1492,6 @@ async def tool_web_search_python(request: Request, payload: dict[str, Any] = Bod
 @app.post("/api/tools/read-url")
 async def tool_read_url_python(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Fetch and extract readable text from a public URL directly via Python (SSRF-protected, zero proxies)."""
-    _rate_limit("read-url:" + _sha(_client_ip(request)), 45, 300)
     raw_url = str(payload.get("url") or "").strip()[:1000]
     safe_url = _validate_public_http_or_https_url(raw_url)
     try:

@@ -499,30 +499,28 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             async def get(self, url, **kwargs):
                 params = kwargs.get("params") or {}
                 if url.endswith("/info"):
+                    return httpx.Response(200, json={"named_endpoints": {"/chat_predict": {"parameters": []}}})
+                if "Txt2video" in url and params.get("action") == "generate":
                     return httpx.Response(
                         200,
                         json={
-                            "named_endpoints": {
-                                "/chat_predict": {"parameters": []},
-                                "/text_to_video": {
-                                    "parameters": [
-                                        {"parameter_name": "prompt", "parameter_default": ""},
-                                        {"parameter_name": "negative_prompt", "parameter_default": ""},
-                                        {"parameter_name": "height_ui", "parameter_default": 512},
-                                        {"parameter_name": "width_ui", "parameter_default": 896},
-                                        {"parameter_name": "mode", "parameter_default": "text-to-video"},
-                                        {"parameter_name": "duration_ui", "parameter_default": 3.5},
-                                    ]
-                                },
-                            }
+                            "statusCode": 200,
+                            "success": True,
+                            "source": "Omegatech",
+                            "data": {
+                                "prompt": params.get("prompt"),
+                                "ratio": params.get("ratio"),
+                                "sound": params.get("sound") == "true",
+                                "videoUrl": "https://sora.aritek.app/generated/t2vStS51220f3jsmazg11rmt0cv76mreem7fc-ft3.1.0.mp4",
+                            },
+                            "timestamp": "2026-11-14T17:55:53.645Z",
+                            "attribution": "@Omegatech-01",
                         },
                     )
-                if "/file=" in url or url.endswith(".mp4"):
+                if "sora.aritek.app/generated/" in url or url.endswith(".mp4"):
                     return httpx.Response(200, content=fake_mp4, headers={"content-type": "video/mp4"})
                 if "/ai/aiappgen" in url or "/ai/nano-banana" in url:
                     return httpx.Response(200, content=fake_png, headers={"content-type": "image/png"})
-                if params.get("action") == "status":
-                    return httpx.Response(200, json={"status": "SUCCEEDED", "video_url": "https://cdn.example.com/out.mp4"})
                 if "html.duckduckgo.com" in url:
                     return httpx.Response(
                         200,
@@ -534,13 +532,9 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             async def post(self, url, **kwargs):
                 if "/call/chat_predict" in url:
                     return httpx.Response(200, json={"event_id": "evt-qwen-1"})
-                if "/call/text_to_video" in url:
-                    return httpx.Response(200, json={"event_id": "evt-vid-1"})
                 return httpx.Response(404, text="not found")
 
             def stream(self, method, url, **kwargs):
-                is_vid = "/call/text_to_video/" in url
-
                 class _FakeStream:
                     status_code = 200
 
@@ -551,14 +545,9 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
                         return False
 
                     async def aiter_lines(self_inner):
-                        if is_vid:
-                            yield "event: complete"
-                            yield 'data: [{"video": {"path": "/tmp/gradio/out.mp4"}}, 42]'
-                            yield ""
-                        else:
-                            yield "event: complete"
-                            yield 'data: [null, null, null, null, [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "مرحباً من بايثون مباشرة"}]]'
-                            yield ""
+                        yield "event: complete"
+                        yield 'data: [null, null, null, null, [{"role": "user", "content": "hello"}, {"role": "assistant", "content": "مرحباً من بايثون مباشرة"}]]'
+                        yield ""
 
                     async def aiter_bytes(self_inner):
                         yield (
