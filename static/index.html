@@ -6656,7 +6656,7 @@ $('#setClose').addEventListener('click', () => { saveState(); });
   S.model = 'auto';
   localStorage.setItem('g3_model', 'auto');
   state.qwenOmniSpace = DEFAULT_QWEN_SPACE;
-  state.qwenOmniEndpoint = localStorage.getItem('g3_qwen_omni_endpoint') || 'chat_predict';
+  state.qwenOmniEndpoint = 'chat_predict';
 
   const routeMetaCache = new Map();
   ai.turnRoute = null;
@@ -7413,8 +7413,9 @@ $('#setClose').addEventListener('click', () => { saveState(); });
             finished=handleQwenSse(block)||finished;
           }
         }
-        if(buffer.trim()) handleQwenSse(buffer);
-        if(ai.received||ai.stopLoop) break;
+        if(buffer.trim()) finished=handleQwenSse(buffer)||finished;
+        if(finished||ai.stopLoop) break;
+        if(ai.received) throw new Error('انقطع بث المحرك قبل اكتمال الرد.');
         if(attempt===0) await new Promise(r=>setTimeout(r,900));
       }
       if(!ai.received&&!ai.stopLoop) throw new Error('انتهى بث المحرك دون نص — أعد المحاولة.');
@@ -7647,6 +7648,7 @@ $('#setClose').addEventListener('click', () => { saveState(); });
       }
     }
     if (!done && buf.trim()) parseBlk(buf);
+    if (!done) throw new Error('انقطع بث المحرك قبل اكتمال الرد.');
     return latest;
   };
 

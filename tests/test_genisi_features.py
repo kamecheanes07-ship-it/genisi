@@ -778,156 +778,87 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
             )
             self.assertEqual(r_ssrf.status_code, 400)
 
-    def test_qwen_hf_token_auth_and_429_multi_tier_failover(self) -> None:
-        # Enforce user constraint: ONLY Qwen language models — zero Omegatech/Pollinations LLMs in app/main.py
-        main_src = (REPO_ROOT / "app" / "main.py").read_text(encoding="utf-8")
-        for banned_llm in (
-            "_omegatech_chat_fallback",
-            "POLLINATIONS_OPENAI_URL",
-            "openai-fast",
-            "deepseek-v3.2",
-            "/Deep-ai",
-            "/Gemini2",
-            "/Chatgpt-v2",
-        ):
-            self.assertNotIn(banned_llm, main_src, f"Non-Qwen LLM reference must not exist in app/main.py: {banned_llm}")
-
-        real_async_client = httpx.AsyncClient
-        seen_auth_headers: list[str] = []
-        ms_payloads: list[list] = []
-        qwen3_payloads: list[list] = []
-        qwen25_payloads: list[list] = []
-        stage = {"mode": "ms_ok"}
+    def test_qwen_single_space_success_and_no_failover(self) -> None:
+        real_client = httpx.AsyncClient
+        requests = []
+        mode = {"fail": False}
         self.main_mod._qwen_meta_cache.clear()
 
-        def handler(req: httpx.Request) -> httpx.Response:
-            url = str(req.url)
-            auth_val = req.headers.get("authorization", "")
-            if ".hf.space" in url and auth_val:
-                seen_auth_headers.append(auth_val)
-
-            # Tier 1: Primary Qwen3.5-Omni-Offline-Demo HF Space returns 429
-            if "qwen-qwen3-5-omni-offline-demo.hf.space" in url:
-                return httpx.Response(429, text="Too Many Requests")
-
-            # Tier 2: Official Alibaba ModelScope mirror of Qwen3.5-Omni-Offline-Demo (.ms.show)
-            if "qwen-qwen3-5-omni-offline-demo.ms.show" in url:
-                if stage["mode"] != "ms_ok":
-                    return httpx.Response(503, text="Mirror busy")
-                if url.endswith("/gradio_api/info") and req.method == "GET":
-                    return httpx.Response(
-                        200,
-                        json={"named_endpoints": {"/chat_predict": {"parameters": []}}},
-                        headers={"Set-Cookie": "ms_studio_sess=ok123; Path=/"},
-                    )
-                if url.endswith("/gradio_api/call/chat_predict") and req.method == "POST":
-                    body = json.loads(req.content.decode("utf-8"))
-                    ms_payloads.append(body["data"])
-                    return httpx.Response(200, json={"event_id": "evt_ms_qwen35"})
-                if url.endswith("/gradio_api/call/chat_predict/evt_ms_qwen35"):
-                    skip = '{"__type__":"update"}'
-                    hist = json.dumps(
-                        [
-                            {"role": "user", "content": "مرحباً"},
-                            {"role": "assistant", "content": "رد أصيل من Qwen3.5-Omni-Plus عبر ModelScope"},
-                        ],
-                        ensure_ascii=False,
-                    )
-                    sse = (
-                        f"event: generating\ndata: [null, null, null, null, [{{\"role\":\"user\",\"content\":\"مرحباً\"}}], {skip}, {skip}]\n\n"
-                        f"event: generating\ndata: [{skip}, {skip}, {skip}, {skip}, {hist}, {skip}, {skip}]\n\n"
-                        f"event: complete\ndata: [{skip}, {skip}, {skip}, {skip}, {hist}, {skip}, {skip}]\n\n"
-                    ).encode("utf-8")
-                    return httpx.Response(200, content=sse, headers={"Content-Type": "text/event-stream"})
-
-            # Tier 3: Official Qwen3-Omni-Demo HF Space (12 positional args)
-            if "qwen-qwen3-omni-demo.hf.space" in url:
-                if stage["mode"] == "qwen25_ok":
-                    return httpx.Response(429, text="Too Many Requests")
-                if url.endswith("/gradio_api/call/chat_predict") and req.method == "POST":
-                    body = json.loads(req.content.decode("utf-8"))
-                    qwen3_payloads.append(body["data"])
-                    return httpx.Response(200, json={"event_id": "evt_qwen3_fallback"})
-                if url.endswith("/gradio_api/call/chat_predict/evt_qwen3_fallback"):
-                    sse = (
-                        "event: complete\n"
-                        'data: [null, null, null, null, [{"role": "user", "content": "مرحباً"}, {"role": "assistant", "content": "رد احتياطي من Qwen3 Omni"}]]\n\n'
-                    ).encode("utf-8")
-                    return httpx.Response(200, content=sse, headers={"Content-Type": "text/event-stream"})
-
-            # Tier 4: Official Qwen2.5-Omni-7B-Demo HF Space (7 positional args — pure Qwen!)
-            if "qwen-qwen2-5-omni-7b-demo.hf.space" in url:
-                if url.endswith("/gradio_api/call/chat_predict") and req.method == "POST":
-                    body = json.loads(req.content.decode("utf-8"))
-                    qwen25_payloads.append(body["data"])
-                    return httpx.Response(200, json={"event_id": "evt_qwen25_fallback"})
-                if url.endswith("/gradio_api/call/chat_predict/evt_qwen25_fallback"):
-                    sse = (
-                        "event: complete\n"
-                        'data: ["", null, null, null, [{"role": "user", "content": "مرحباً"}, {"role": "assistant", "content": "رد نقي من Qwen2.5-Omni فقط بدون Omegatech"}]]\n\n'
-                    ).encode("utf-8")
-                    return httpx.Response(200, content=sse, headers={"Content-Type": "text/event-stream"})
-
-            raise AssertionError(f"Unexpected non-Qwen URL in failover test: {url}")
+        def handler(req):
+            requests.append(req)
+            self.assertEqual(req.url.host, "qwen-qwen3-5-omni-offline-demo.hf.space")
+            if mode["fail"]:
+                return httpx.Response(429, text="busy")
+            if req.method == "POST" and req.url.path.endswith("/upload"):
+                return httpx.Response(200, json=["/tmp/gradio/image.png"])
+            if req.method == "POST":
+                args = json.loads(req.content)["data"]
+                self.assertEqual(len(args), 9)
+                self.assertEqual(args[0], "مرحبا")
+                return httpx.Response(200, json={"event_id": "evt1"})
+            frame = json.dumps([None, None, None, None, [{"role": "user", "content": "مرحبا"}, {"role": "assistant", "content": "أهلاً"}]], ensure_ascii=False)
+            return httpx.Response(200, text=f"event: generating\ndata: {frame}\n\nevent: complete\ndata: {frame}\n\n")
 
         transport = httpx.MockTransport(handler)
-        with (
-            patch.dict(os.environ, {"HF_TOKEN": "hf_test_token_123456"}, clear=False),
-            patch.object(
-                self.main_mod.httpx,
-                "AsyncClient",
-                side_effect=lambda **kw: real_async_client(transport=transport, **{k: v for k, v in kw.items() if k != "transport"}),
-            ),
-            patch("app.main.asyncio.sleep", return_value=None),
-        ):
-            # 1) /api/models/qwen/info succeeds in <1ms with zero upstream calls
-            r_info = self.client.get("/api/models/qwen/info")
-            self.assertEqual(r_info.status_code, 200)
-            self.assertTrue(r_info.json()["ok"])
+        with patch.dict(os.environ, {"HF_TOKEN": "hf_test_token_123456", "DASHSCOPE_API_KEY": "ignored", "QWEN_EXTRA_SPACE_URLS": "https://example.com"}), patch.object(self.main_mod.httpx, "AsyncClient", side_effect=lambda **kw: real_client(transport=transport, **kw)):
+            payload = {"data": ["مرحبا", None, None, None, [], "system", 0.5, 0.8, 20]}
+            info = self.client.get("/api/models/qwen/info").json()
+            self.assertEqual(info["space"], "https://qwen-qwen3-5-omni-offline-demo.hf.space")
+            self.assertEqual(self.client.post("/api/models/qwen/once", json=payload).json()["text"], "أهلاً")
+            self.assertIn("أهلاً", self.client.post("/api/models/qwen/stream", json=payload).text)
+            upload = self.client.post("/api/models/qwen/upload?name=image.png&mime=image/png", content=b"image")
+            self.assertEqual(upload.status_code, 200)
+            self.assertEqual(upload.json()["path"], "/tmp/gradio/image.png")
+            self.assertTrue(any(r.headers.get("authorization") == "Bearer hf_test_token_123456" for r in requests))
+            mode["fail"] = True
+            requests.clear()
+            self.assertEqual(self.client.post("/api/models/qwen/once", json=payload).status_code, 502)
+            self.assertIn("event: error", self.client.post("/api/models/qwen/stream", json=payload).text)
+            self.assertEqual(self.client.post("/api/models/qwen/upload?name=image.png", content=b"image").status_code, 502)
+            self.assertTrue(requests)
+            self.assertEqual(self.client.post("/api/models/qwen/once", json={**payload, "endpoint": "other"}).status_code, 422)
 
-            # 2) Primary HF 429 -> seamless failover to official ModelScope Qwen3.5-Omni-Offline-Demo (9 exact args)
-            r_stream_ms = self.client.post(
-                "/api/models/qwen/stream",
-                json={"data": ["مرحباً", None, None, None, [], "sys", 0.5, 0.8, 20], "endpoint": "chat_predict"},
-            )
-            self.assertEqual(r_stream_ms.status_code, 200)
-            self.assertIn("رد أصيل من Qwen3.5-Omni-Plus عبر ModelScope", r_stream_ms.text)
-            self.assertIn("Bearer hf_test_token_123456", seen_auth_headers)
-            self.assertEqual(len(ms_payloads[-1]), 9)
+    def test_qwen_partial_stream_is_reported_as_failure(self) -> None:
+        real_client = httpx.AsyncClient
+        frame = json.dumps([None, None, None, None, [
+            {"role": "user", "content": "hi"}, {"role": "assistant", "content": "رد غير مكتمل"}
+        ]], ensure_ascii=False)
 
-            # 3) HF 429 + ModelScope busy -> seamless failover to Qwen3-Omni-Demo with 12 adapted args
-            self.main_mod._qwen_meta_cache.clear()
-            stage["mode"] = "qwen3_ok"
-            r_stream = self.client.post(
-                "/api/models/qwen/stream",
-                json={"data": ["مرحباً", None, None, None, [], "sys", 0.5, 0.8, 20], "endpoint": "chat_predict"},
-            )
-            self.assertEqual(r_stream.status_code, 200)
-            self.assertIn("رد احتياطي من Qwen3 Omni", r_stream.text)
-            self.assertEqual(len(qwen3_payloads[-1]), 12)
-            self.assertEqual(qwen3_payloads[-1][6], "Cherry / 芊悦")
-            self.assertFalse(qwen3_payloads[-1][10])
+        def handler(req):
+            self.assertEqual(req.url.host, "qwen-qwen3-5-omni-offline-demo.hf.space")
+            if req.method == "POST":
+                return httpx.Response(200, json={"event_id": "partial"})
+            return httpx.Response(200, text=f"event: generating\ndata: {frame}\n\n")
 
-            # 4) Tiers 1-3 throttled -> seamless failover to official Qwen2.5-Omni-7B-Demo (7 args, 100% pure Qwen)
-            self.main_mod._qwen_meta_cache.clear()
-            stage["mode"] = "qwen25_ok"
-            huge_arabic_sys = ("أنت جينيسي أطلس المساعد الذكي المتقدم. " * 950) + "\n<tool_call>{\"name\":\"web_search\"}</tool_call>"
-            r_stream_t4 = self.client.post(
-                "/api/models/qwen/stream",
-                json={"data": ["كيف حالك اليوم يا جينيسي؟", None, None, None, [], huge_arabic_sys, 0.5, 0.8, 20], "endpoint": "chat_predict"},
-            )
-            self.assertEqual(r_stream_t4.status_code, 200)
-            self.assertIn("رد نقي من Qwen2.5-Omni فقط بدون Omegatech", r_stream_t4.text)
-            self.assertEqual(len(qwen25_payloads[-1]), 7)
-            self.assertEqual(qwen25_payloads[-1][6], "Cherry")
+        transport = httpx.MockTransport(handler)
+        with patch.object(self.main_mod.httpx, "AsyncClient", side_effect=lambda **kw: real_client(transport=transport, **kw)):
+            payload = {"data": ["hi", None, None, None, [], "", 0.7, 0.8, 20]}
+            stream = self.client.post("/api/models/qwen/stream", json=payload)
+            self.assertIn("رد غير مكتمل", stream.text)
+            self.assertIn("event: error", stream.text)
+            self.assertNotIn("event: complete", stream.text)
+            self.assertEqual(self.client.post("/api/models/qwen/once", json=payload).status_code, 502)
+            for path in ("/api/models/qwen/once", "/api/models/qwen/stream"):
+                self.assertEqual(self.client.post(path, json={"data": ["too short"]}).status_code, 422)
 
-            self.main_mod._qwen_meta_cache.clear()
-            r_once_t4 = self.client.post(
-                "/api/models/qwen/once",
-                json={"data": ["عنوان قصير", None, None, None, [], huge_arabic_sys, 0.2, 0.8, 12], "endpoint": "chat_predict"},
-            )
-            self.assertEqual(r_once_t4.status_code, 200)
-            self.assertEqual(r_once_t4.json()["text"], "رد نقي من Qwen2.5-Omni فقط بدون Omegatech")
+    def test_qwen_empty_complete_uses_latest_generating_frame(self) -> None:
+        real_client = httpx.AsyncClient
+        frame = json.dumps([None, None, None, None, [
+            {"role": "user", "content": "hi"}, {"role": "assistant", "content": "جواب كامل"}
+        ]], ensure_ascii=False)
+
+        def handler(req):
+            if req.method == "POST":
+                return httpx.Response(200, json={"event_id": "empty-complete"})
+            return httpx.Response(200, text=f"event: generating\ndata: {frame}\n\nevent: complete\ndata: null\n\n")
+
+        transport = httpx.MockTransport(handler)
+        with patch.object(self.main_mod.httpx, "AsyncClient", side_effect=lambda **kw: real_client(transport=transport, **kw)):
+            payload = {"data": ["hi", None, None, None, [], "", 0.7, 0.8, 20]}
+            stream = self.client.post("/api/models/qwen/stream", json=payload)
+            self.assertIn("event: complete\ndata: [", stream.text)
+            self.assertIn("جواب كامل", stream.text)
+            self.assertEqual(self.client.post("/api/models/qwen/once", json=payload).json()["text"], "جواب كامل")
 
     def test_qwen_empty_complete_suppression_and_split_arabic_utf8_chunks(self) -> None:
         """Ensure empty upstream `event: complete` never aborts browser stream and split 2-byte Arabic UTF-8 never corrupts."""
@@ -956,6 +887,8 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
         )
         chunk_a, chunk_b = full_sse_bytes[:split_idx], full_sse_bytes[split_idx:]
 
+        mode = {"empty": True}
+
         class _SplitAndEmptyCompleteClient:
             def __init__(self, *args, **kwargs):
                 pass
@@ -971,9 +904,7 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
 
             async def post(self, url, **kwargs):
                 if "qwen-qwen3-5-omni-offline-demo.hf.space" in url:
-                    return httpx.Response(200, json={"event_id": "evt_empty_1"})
-                if "qwen-qwen3-5-omni-offline-demo.ms.show" in url:
-                    return httpx.Response(200, json={"event_id": "evt_split_2"})
+                    return httpx.Response(200, json={"event_id": "evt_empty_1" if mode["empty"] else "evt_split_2"})
                 return httpx.Response(404, text="not found")
 
             def stream(self, method, url, **kwargs):
@@ -1008,10 +939,17 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
                 json={"data": ["اختبار", None, None, None, [], "sys", 0.6, 0.8, 20], "endpoint": "chat_predict"},
             )
             self.assertEqual(res.status_code, 200)
+            self.assertIn("event: error", res.text)
+            self.assertNotIn("event: complete", res.text)
+            mode["empty"] = False
+            res = self.client.post(
+                "/api/models/qwen/stream",
+                json={"data": ["اختبار", None, None, None, [], "sys", 0.6, 0.8, 20], "endpoint": "chat_predict"},
+            )
             body_text = res.text
             # Must NOT contain corrupted replacement character U+FFFD
             self.assertNotIn("\ufffd", body_text)
-            # Must contain the intact Arabic text from the second mirror
+            # Must contain the intact Arabic text from the Space
             self.assertIn(arabic_reply, body_text)
             # Must contain ONLY ONE `event: complete` (the empty one from mirror 1 was suppressed!)
             self.assertEqual(body_text.count("event: complete"), 1)

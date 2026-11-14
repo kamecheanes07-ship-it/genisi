@@ -14,6 +14,7 @@ import re
 import socket
 import time
 import uuid
+from contextlib import aclosing, suppress
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote, unquote, urljoin, urlsplit
@@ -45,10 +46,7 @@ from .worker_client import worker as WORKER
 APP_NAME = "AnesNT Genisi"
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production").lower()
-QWEN_OMNI_SPACE_URL = os.getenv("QWEN_OMNI_SPACE_URL", "https://qwen-qwen3-5-omni-offline-demo.hf.space").rstrip("/")
-QWEN_MODELSCOPE_MIRROR_URL = os.getenv("QWEN_MODELSCOPE_MIRROR_URL", "https://qwen-qwen3-5-omni-offline-demo.ms.show").rstrip("/")
-QWEN3_OMNI_FALLBACK_URL = os.getenv("QWEN3_OMNI_FALLBACK_URL", "https://qwen-qwen3-omni-demo.hf.space").rstrip("/")
-QWEN25_OMNI_FALLBACK_URL = os.getenv("QWEN25_OMNI_FALLBACK_URL", "https://qwen-qwen2-5-omni-7b-demo.hf.space").rstrip("/")
+QWEN_OMNI_SPACE_URL = "https://qwen-qwen3-5-omni-offline-demo.hf.space"
 OMEGATECH_AI_BASE_URL = os.getenv("OMEGATECH_AI_BASE_URL", "https://api.omegatech.app/api/ai").rstrip("/")
 STEPAUDIO_MUSIC_SPACE_URL = os.getenv("STEPAUDIO_MUSIC_SPACE_URL", "https://stepfun-ai-stepaudio-3-music.hf.space").rstrip("/")
 VOXCPM_SPACE_URL = os.getenv("VOXCPM_SPACE_URL", "https://openbmb-voxcpm-demo.hf.space").rstrip("/")
@@ -182,7 +180,7 @@ def health() -> dict[str, Any]:
     return {
         "ok": True,
         "app": APP_NAME,
-        "qwen_configured": bool(AGENT.base_url and AGENT.api_key),
+        "qwen_configured": True,
         "sandbox_configured": WORKER.enabled and bool(os.getenv("SANDBOX_OWNER_EMAIL", "").strip()),
         "sandbox_mode": "local",
         "sandbox_note": "Local workspace runner; not a per-user Docker container.",
@@ -190,7 +188,6 @@ def health() -> dict[str, Any]:
         "huggingface_dataset": os.getenv("GENISI_DATASET_ID", "AnesKAM/Genisi-users"),
         "media_ttl_days": MEDIA_TTL_DAYS,
         "qwen_omni_space": QWEN_OMNI_SPACE_URL,
-        "qwen_modelscope_mirror": QWEN_MODELSCOPE_MIRROR_URL,
         "voxcpm_space": VOXCPM_SPACE_URL,
         "stepaudio_music_space": STEPAUDIO_MUSIC_SPACE_URL,
         "windows12_prompt": windows12_prompt_metadata(),
@@ -307,8 +304,6 @@ async def chat_stream(request: Request) -> StreamingResponse:
     ensure_sandbox_owner(user)
     if not WORKER.enabled:
         raise HTTPException(503, "Local Genisi Sandbox is disabled. Set SANDBOX_MODE=local.")
-    if not AGENT.base_url or not AGENT.api_key or not AGENT.model:
-        raise HTTPException(503, "لم يتم إعداد مزود النموذج. اضبط HF_INFERENCE_MODEL أو QWEN_BASE_URL وQWEN_API_KEY.")
 
     try:
         payload = await request.json()
@@ -1071,26 +1066,8 @@ def _sniff_image_mime(raw: bytes) -> str:
 
 
 def _qwen_gradio_candidates() -> list[str]:
-    base_list: list[str] = []
-    for raw in [
-        QWEN_OMNI_SPACE_URL,
-        QWEN_MODELSCOPE_MIRROR_URL,
-        QWEN3_OMNI_FALLBACK_URL,
-        QWEN25_OMNI_FALLBACK_URL,
-        *[u.strip() for u in os.getenv("QWEN_EXTRA_SPACE_URLS", "").split(",") if u.strip()],
-    ]:
-        cleaned = (raw or "").strip().rstrip("/")
-        if cleaned.startswith(("http://", "https://")) and cleaned not in base_list:
-            base_list.append(cleaned)
-
-    now = time.time()
-    healthy = [u for u in base_list if now >= float(_qwen_meta_cache.get(f"throttled:{u}") or 0.0)]
-    throttled = [u for u in base_list if u not in healthy]
-    pref = str(_qwen_meta_cache.get("preferred_space") or "")
-    pref_ts = float(_qwen_meta_cache.get("preferred_ts") or 0.0)
-    if pref and pref in healthy and (now - pref_ts) < 240.0:
-        healthy = [pref] + [u for u in healthy if u != pref]
-    return healthy + throttled
+    """The language model and its uploads use only the requested Space."""
+    return [QWEN_OMNI_SPACE_URL]
 
 
 def _prune_qwen_uploads() -> None:
@@ -1311,43 +1288,6 @@ async def _adapt_qwen_data_for_space(
     audio_fd = await _remap_file_data_for_space(client, norm[1], space_url)
     image_fd = await _remap_file_data_for_space(client, norm[2], space_url)
     video_fd = await _remap_file_data_for_space(client, norm[3], space_url)
-    if (
-        space_url == QWEN3_OMNI_FALLBACK_URL
-        and space_url not in {QWEN_OMNI_SPACE_URL, QWEN_MODELSCOPE_MIRROR_URL}
-        and len(norm) == 9
-    ):
-        # Qwen/Qwen3-Omni-Demo /chat_predict signature (12 positional args):
-        # [text, audio, image, video, history, system_prompt, voice_choice, temperature, top_p, top_k, return_audio, enable_thinking]
-        return [
-            norm[0],
-            audio_fd,
-            image_fd,
-            video_fd,
-            norm[4],
-            norm[5],
-            "Cherry / 芊悦",
-            norm[6],
-            norm[7],
-            norm[8],
-            False,
-            False,
-        ]
-    if (
-        space_url == QWEN25_OMNI_FALLBACK_URL
-        and space_url not in {QWEN_OMNI_SPACE_URL, QWEN_MODELSCOPE_MIRROR_URL, QWEN3_OMNI_FALLBACK_URL}
-        and len(norm) == 9
-    ):
-        # Qwen/Qwen2.5-Omni-7B-Demo /chat_predict signature (7 positional args):
-        # [text, audio, image, video, history, system_prompt, voice_choice]
-        return [
-            norm[0],
-            audio_fd,
-            image_fd,
-            video_fd,
-            norm[4],
-            norm[5],
-            "Cherry",
-        ]
     return [
         norm[0],
         audio_fd,
@@ -1424,71 +1364,13 @@ def _extract_qwen_assistant_text(payload: Any) -> str | None:
     return None
 
 
-def _extract_openai_chat_reply(obj: Any) -> str:
-    if not isinstance(obj, dict):
-        return ""
-    choices = obj.get("choices")
-    if isinstance(choices, list) and choices:
-        msg = (choices[0] or {}).get("message") if isinstance(choices[0], dict) else None
-        if isinstance(msg, dict) and isinstance(msg.get("content"), str) and msg["content"].strip():
-            return msg["content"].strip()
-    return ""
-
-
-async def _dashscope_qwen35_direct(
-    client: httpx.AsyncClient,
-    data: list[Any],
-) -> str | None:
-    """Optional zero-Gradio direct DashScope qwen3.5-omni-plus path when DASHSCOPE_API_KEY is configured."""
-    api_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()
-    if not api_key or any(bool(data[idx]) for idx in (1, 2, 3) if len(data) > idx):
-        return None
-    norm = _normalize_qwen_chat_predict_args(data)
-    user_text = str(norm[0] or "")
-    history = norm[4] if len(norm) > 4 and isinstance(norm[4], list) else []
-    sys_prompt = str(norm[5] or "")
-    temp = float(norm[6]) if len(norm) > 6 else 0.7
-    top_p = float(norm[7]) if len(norm) > 7 else 0.8
-    top_k = int(norm[8]) if len(norm) > 8 else 20
-
-    messages: list[dict[str, Any]] = []
-    if sys_prompt:
-        messages.append({"role": "system", "content": sys_prompt})
-    for h in history:
-        messages.append({"role": h["role"], "content": [{"type": "text", "text": h["content"]}]})
-    if user_text:
-        messages.append({"role": "user", "content": [{"type": "text", "text": user_text}]})
-    if not messages:
-        return None
-
-    base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
-    res = await client.post(
-        f"{base_url}/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
-        json={
-            "model": os.getenv("DASHSCOPE_OMNI_MODEL", "qwen3.5-omni-plus"),
-            "messages": messages,
-            "modalities": ["text"],
-            "temperature": temp,
-            "top_p": top_p,
-            "extra_body": {"top_k": top_k},
-        },
-        timeout=90.0,
-    )
-    if res.status_code >= 400:
-        return None
-    return _extract_openai_chat_reply(res.json()) or None
-
-
 @app.get("/api/models/qwen/info")
 async def qwen_model_info(request: Request, endpoint: str = "chat_predict") -> dict[str, Any]:
     """Return Qwen3.5-Omni gateway readiness immediately without burning upstream HF rate limits."""
     chosen = endpoint.strip().strip("/") or "chat_predict"
-    active_space = str(_qwen_meta_cache.get("preferred_space") or QWEN_OMNI_SPACE_URL)
+    if chosen != "chat_predict":
+        raise HTTPException(422, "المسار المدعوم هو chat_predict فقط")
+    active_space = QWEN_OMNI_SPACE_URL
     prefix = str(_qwen_meta_cache.get(f"prefix:{active_space}") or "/gradio_api")
     return {
         "ok": True,
@@ -1505,7 +1387,7 @@ async def qwen_model_upload(
     name: str = "upload.bin",
     mime: str = "application/octet-stream",
 ) -> dict[str, Any]:
-    """Upload a multimodal attachment directly from Python with multi-Space & public host failover."""
+    """Upload a multimodal attachment to the requested Space from Python."""
     raw = await request.body()
     if not raw:
         raise HTTPException(400, "الملف المرفق فارغ")
@@ -1531,249 +1413,170 @@ async def qwen_model_upload(
                 except Exception:
                     continue
 
-            public_url = await _upload_to_public_temp_host(client, raw, safe_name, safe_mime)
-            if public_url:
-                _cache_qwen_upload(public_url, "", safe_name, safe_mime, raw, public_url)
-                return {
-                    "ok": True,
-                    "path": public_url,
-                    "url": public_url,
-                    "file_data": {"path": public_url, "url": public_url, "meta": {"_type": "gradio.FileData"}},
-                }
-            raise HTTPException(502, "تعذر رفع المرفق إلى جميع خوادم الوسائط حالياً")
+            raise HTTPException(502, "تعذر رفع المرفق إلى مساحة Qwen حالياً")
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(502, f"تعذر رفع المرفق عبر الخادم: {str(exc)[:220]}") from exc
 
 
+async def _qwen_sse_events(upstream: Any, *, keepalive_interval: float = 15.0, idle_limit: float = 165.0):
+    """Decode SSE without cancelling a pending upstream read on each keepalive."""
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    chunks = upstream.aiter_bytes().__aiter__()
+    pending = None
+    buf = ""
+    idle = 0.0
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.ensure_future(chunks.__anext__())
+            done, _ = await asyncio.wait({pending}, timeout=keepalive_interval)
+            if not done:
+                idle += keepalive_interval
+                if idle >= idle_limit:
+                    raise TimeoutError("Qwen SSE stream timed out")
+                yield None
+                continue
+            idle = 0.0
+            try:
+                raw = pending.result()
+                eof = False
+            except StopAsyncIteration:
+                raw = b""
+                eof = True
+            pending = None
+            # Normalize only after appending so CRLF split across chunks is preserved.
+            buf = (buf + decoder.decode(raw, final=eof)).replace("\r\n", "\n")
+            if eof and buf.strip() and not buf.endswith("\n\n"):
+                buf += "\n\n"
+            while "\n\n" in buf:
+                block, buf = buf.split("\n\n", 1)
+                event = ""
+                data_lines = []
+                for line in block.split("\n"):
+                    if line.startswith("event:"):
+                        event = line[6:].strip()
+                    elif line.startswith("data:"):
+                        data_lines.append(line[5:].lstrip())
+                if event:
+                    yield event, "\n".join(data_lines), block
+            if eof:
+                return
+    finally:
+        if pending is not None:
+            pending.cancel()
+            with suppress(asyncio.CancelledError, StopAsyncIteration):
+                await pending
+
+
+def _qwen_payload(payload: dict[str, Any]) -> tuple[list[Any], str]:
+    data = payload.get("data")
+    if not isinstance(data, list) or len(data) != 9:
+        raise HTTPException(422, "الحقل data يجب أن يحتوي على 9 عناصر")
+    endpoint = str(payload.get("endpoint") or "chat_predict").strip().strip("/") or "chat_predict"
+    if endpoint != "chat_predict":
+        raise HTTPException(422, "المسار المدعوم هو chat_predict فقط")
+    return data, endpoint
+
+
 @app.post("/api/models/qwen/stream")
 async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...)) -> StreamingResponse:
-    """Stream Qwen3.5-Omni-Offline-Demo SSE via Python across HF + ModelScope mirrors with UTF-8 safety & failover."""
-    data = payload.get("data")
-    if not isinstance(data, list):
-        raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
-    endpoint = str(payload.get("endpoint") or "chat_predict").strip().strip("/") or "chat_predict"
+    """Forward the requested Space's SSE and report incomplete upstream streams."""
+    data, endpoint = _qwen_payload(payload)
 
     async def _sse_generator():
-        # Immediately flush an SSE comment so reverse proxies (HF Spaces) see 200 OK + active bytes in <5ms
         yield b": connected\n\n"
-        errors: list[str] = []
-        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=15.0), follow_redirects=True) as client:
-            # Optional direct DashScope qwen3.5-omni-plus when DASHSCOPE_API_KEY is configured
-            if os.getenv("DASHSCOPE_API_KEY", "").strip():
-                try:
-                    direct_reply = await _dashscope_qwen35_direct(client, data)
-                    if direct_reply:
-                        norm = _normalize_qwen_chat_predict_args(data)
-                        in_hist = list(norm[4]) if len(norm) > 4 and isinstance(norm[4], list) else []
-                        if norm[0]:
-                            in_hist.append({"role": "user", "content": str(norm[0])})
-                        in_hist.append({"role": "assistant", "content": direct_reply})
-                        frame = json.dumps([None, None, None, None, in_hist], ensure_ascii=False)
-                        yield f"event: generating\ndata: {frame}\n\nevent: complete\ndata: {frame}\n\n".encode("utf-8")
-                        return
-                except Exception as exc:
-                    errors.append(f"dashscope: {str(exc)[:140]}")
-
-            for space_url in _qwen_gradio_candidates():
-                try:
-                    call_url, event_id = await _start_qwen_gradio_call(client, data, endpoint, space_url)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    errors.append(str(exc)[:180])
-                    continue
-
-                emitted_text = False
-                completed_ok = False
-                try:
-                    async with client.stream(
-                        "GET",
-                        f"{call_url}/{event_id}",
-                        headers=_hf_space_headers(space_url, accept="text/event-stream"),
-                        timeout=180.0,
-                    ) as upstream:
-                        if upstream.status_code >= 400:
-                            if upstream.status_code == 429:
-                                _qwen_meta_cache[f"throttled:{space_url}"] = time.time() + 75.0
-                            err_txt = (await upstream.aread()).decode("utf-8", errors="replace")[:180]
-                            errors.append(f"{space_url} SSE HTTP {upstream.status_code}: {err_txt}")
-                            continue
-
-                        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-                        buf = ""
-                        aborted_upstream = False
-                        chunk_iter = upstream.aiter_bytes().__aiter__()
-                        idle_ticks = 0
-
-                        while True:
-                            try:
-                                raw_chunk = await asyncio.wait_for(chunk_iter.__anext__(), timeout=15.0)
-                                idle_ticks = 0
-                                eof = False
-                            except asyncio.TimeoutError:
-                                idle_ticks += 1
-                                if idle_ticks >= 11:
-                                    errors.append(f"{space_url}: SSE stream timed out")
-                                    aborted_upstream = True
-                                    break
+        emitted_text = False
+        latest_data = ""
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=15.0), follow_redirects=True) as client:
+                space_url = QWEN_OMNI_SPACE_URL
+                call_url, event_id = await _start_qwen_gradio_call(client, data, endpoint, space_url)
+                async with client.stream(
+                    "GET", f"{call_url}/{event_id}",
+                    headers=_hf_space_headers(space_url, accept="text/event-stream"), timeout=180.0,
+                ) as upstream:
+                    if upstream.status_code >= 400:
+                        err_txt = (await upstream.aread()).decode("utf-8", errors="replace")[:180]
+                        raise RuntimeError(f"{space_url} SSE HTTP {upstream.status_code}: {err_txt}")
+                    async with aclosing(_qwen_sse_events(upstream)) as events:
+                        async for item in events:
+                            if item is None:
                                 yield b": keepalive\n\n"
                                 continue
-                            except StopAsyncIteration:
-                                raw_chunk = b""
-                                eof = True
-
-                            decoded = decoder.decode(raw_chunk, final=eof)
-                            if decoded:
-                                buf += decoded.replace("\r\n", "\n")
-                            if eof and buf.strip() and not buf.endswith("\n\n"):
-                                buf += "\n\n"
-
-                            while "\n\n" in buf:
-                                block, buf = buf.split("\n\n", 1)
-                                stripped = block.strip()
-                                if not stripped:
-                                    continue
-                                ev_name = ""
-                                data_lines: list[str] = []
-                                for ln in stripped.split("\n"):
-                                    if ln.startswith("event:"):
-                                        ev_name = ln[6:].strip()
-                                    elif ln.startswith("data:"):
-                                        data_lines.append(ln[5:].strip())
-                                raw_ev_data = "\n".join(data_lines)
-                                if ev_name == "error":
-                                    if not emitted_text:
-                                        errors.append(f"{space_url} stream error: {raw_ev_data[:160]}")
-                                        aborted_upstream = True
-                                        break
-                                    yield (stripped + "\n\n").encode("utf-8")
-                                    return
-                                if ev_name in {"generating", "complete"}:
-                                    extracted: str | None = None
-                                    if raw_ev_data and raw_ev_data != "null":
-                                        try:
-                                            extracted = _extract_qwen_assistant_text(json.loads(raw_ev_data))
-                                        except Exception:
-                                            extracted = None
-                                    if extracted:
-                                        emitted_text = True
-                                    if ev_name == "generating":
-                                        if emitted_text:
-                                            yield (stripped + "\n\n").encode("utf-8")
-                                        continue
-                                    # ev_name == "complete": never forward an empty completion before emitted_text
-                                    if not emitted_text:
-                                        errors.append(f"{space_url}: empty assistant completion")
-                                        aborted_upstream = True
-                                        break
-                                    completed_ok = True
-                                    _qwen_meta_cache["preferred_space"] = space_url
-                                    _qwen_meta_cache["preferred_ts"] = time.time()
-                                    yield (stripped + "\n\n").encode("utf-8")
-                                    return
-                                # Forward heartbeat/process_starts comments harmlessly, never premature completion
-                                if ev_name == "heartbeat":
-                                    yield b": heartbeat\n\n"
-
-                            if aborted_upstream or eof:
-                                break
-
-                        if emitted_text or completed_ok:
-                            _qwen_meta_cache["preferred_space"] = space_url
-                            _qwen_meta_cache["preferred_ts"] = time.time()
-                            return
-                except asyncio.CancelledError:
-                    raise
-                except Exception as exc:
-                    if emitted_text:
-                        yield f"event: error\ndata: {json.dumps({'message': str(exc)[:220]}, ensure_ascii=False)}\n\n".encode("utf-8")
-                        return
-                    errors.append(f"{space_url}: {str(exc)[:160]}")
-                    continue
-
-        err_summary = errors[-1] if errors else "تعذر الاتصال بمحركات Qwen"
-        yield f"event: error\ndata: {json.dumps({'message': err_summary}, ensure_ascii=False)}\n\n".encode("utf-8")
+                            event, raw_data, block = item
+                            if event == "error":
+                                raise RuntimeError(f"Space stream error: {raw_data[:160]}")
+                            if event not in {"generating", "complete"}:
+                                continue
+                            extracted = None
+                            if raw_data and raw_data != "null":
+                                with suppress(ValueError, TypeError):
+                                    extracted = _extract_qwen_assistant_text(json.loads(raw_data))
+                            if extracted:
+                                emitted_text = True
+                                latest_data = json.dumps(json.loads(raw_data), ensure_ascii=False)
+                            if event == "generating":
+                                if extracted:
+                                    yield (block + "\n\n").encode("utf-8")
+                            elif emitted_text:
+                                # Some Gradio versions send an empty completion after a final generating frame.
+                                yield f"event: complete\ndata: {latest_data}\n\n".encode("utf-8")
+                                return
+                            else:
+                                raise RuntimeError("Space returned an empty assistant completion")
+                    raise RuntimeError("Space stream ended before completion")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            message = str(exc)[:220] or "تعذر الاتصال بمساحة Qwen"
+            yield f"event: error\ndata: {json.dumps({'message': message}, ensure_ascii=False)}\n\n".encode("utf-8")
 
     return StreamingResponse(
-        _sse_generator(),
-        media_type="text/event-stream",
+        _sse_generator(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no"},
     )
 
 
 @app.post("/api/models/qwen/once")
 async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Single-turn non-streaming Qwen3.5-Omni call via Python across HF + ModelScope mirrors with failover."""
-    data = payload.get("data")
-    if not isinstance(data, list):
-        raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
-    endpoint = str(payload.get("endpoint") or "chat_predict").strip().strip("/") or "chat_predict"
-
-    errors: list[str] = []
-    async with httpx.AsyncClient(timeout=80.0, follow_redirects=True) as client:
-        if os.getenv("DASHSCOPE_API_KEY", "").strip():
-            try:
-                direct_reply = await _dashscope_qwen35_direct(client, data)
-                if direct_reply:
-                    return {"ok": True, "text": direct_reply}
-            except Exception as exc:
-                errors.append(f"dashscope: {str(exc)[:140]}")
-
-        for space_url in _qwen_gradio_candidates():
-            try:
-                call_url, event_id = await _start_qwen_gradio_call(
-                    client, data, endpoint, space_url, call_timeout=22.0
-                )
+    """Collect a completed answer from the requested Space, never a partial answer."""
+    data, endpoint = _qwen_payload(payload)
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=15.0), follow_redirects=True) as client:
+            space_url = QWEN_OMNI_SPACE_URL
+            call_url, event_id = await _start_qwen_gradio_call(client, data, endpoint, space_url)
+            async with client.stream(
+                "GET", f"{call_url}/{event_id}",
+                headers=_hf_space_headers(space_url, accept="text/event-stream"), timeout=180.0,
+            ) as upstream:
+                if upstream.status_code >= 400:
+                    raise RuntimeError(f"{space_url} HTTP {upstream.status_code}")
                 latest = ""
-                cur_event = ""
-                async with client.stream(
-                    "GET",
-                    f"{call_url}/{event_id}",
-                    headers=_hf_space_headers(space_url, accept="text/event-stream"),
-                    timeout=65.0,
-                ) as sse:
-                    if sse.status_code >= 400:
-                        if sse.status_code == 429:
-                            _qwen_meta_cache[f"throttled:{space_url}"] = time.time() + 75.0
-                        errors.append(f"{space_url} HTTP {sse.status_code}")
-                        continue
-                    failed_sse = False
-                    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-                    buf = ""
-                    async for raw_chunk in sse.aiter_bytes():
-                        buf += decoder.decode(raw_chunk, final=False).replace("\r\n", "\n")
-                        while "\n" in buf:
-                            line, buf = buf.split("\n", 1)
-                            if line.startswith("event:"):
-                                cur_event = line[6:].strip()
-                            elif line.startswith("data:"):
-                                raw_data = line[5:].strip()
-                                if cur_event == "error":
-                                    errors.append(f"{space_url}: {raw_data[:160]}")
-                                    failed_sse = True
-                                    break
-                                if cur_event in {"generating", "complete"} and raw_data and raw_data != "null":
-                                    try:
-                                        extracted = _extract_qwen_assistant_text(json.loads(raw_data))
-                                        if extracted is not None:
-                                            latest = extracted
-                                    except Exception:
-                                        pass
-                        if failed_sse or (cur_event == "complete" and latest):
-                            break
-                    if not failed_sse and latest:
-                        _qwen_meta_cache["preferred_space"] = space_url
-                        _qwen_meta_cache["preferred_ts"] = time.time()
-                        return {"ok": True, "text": latest}
-                    if not failed_sse and not latest:
-                        errors.append(f"{space_url}: empty assistant completion")
-            except Exception as exc:
-                errors.append(str(exc)[:160])
-                continue
-
-    raise HTTPException(502, f"تعذر إتمام الطلب عبر محركات Qwen: {(errors[-1] if errors else 'unknown')[:220]}")
+                async with aclosing(_qwen_sse_events(upstream)) as events:
+                    async for item in events:
+                        if item is None:
+                            continue
+                        event, raw_data, _ = item
+                        if event == "error":
+                            raise RuntimeError(f"Space stream error: {raw_data[:160]}")
+                        if event not in {"generating", "complete"}:
+                            continue
+                        if raw_data and raw_data != "null":
+                            with suppress(ValueError, TypeError):
+                                extracted = _extract_qwen_assistant_text(json.loads(raw_data))
+                                if extracted:
+                                    latest = extracted
+                        if event == "complete":
+                            if latest:
+                                return {"ok": True, "text": latest}
+                            raise RuntimeError("Space returned an empty assistant completion")
+                raise RuntimeError("Space stream ended before completion")
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, f"تعذر إتمام الطلب عبر مساحة Qwen: {str(exc)[:220]}") from exc
 
 
 async def _decode_upstream_image_response(client: httpx.AsyncClient, r: httpx.Response) -> tuple[bytes, str]:

@@ -10,7 +10,7 @@ pinned: false
 
 # Genisi 4 Atlas — Portable Secure Release 58.65.6 — Windows 12 Embedded System Prompt
 
-Portable Docker/FastAPI application. Hugging Face Spaces is optional as a host. The application uses Hugging Face Hub Dataset `AnesKAM/Genisi-users` for persistent encrypted user data, and can optionally use Hugging Face Inference Providers for model inference.
+Portable Docker/FastAPI application. Hugging Face Spaces is optional as a host. The application uses Hugging Face Hub Dataset `AnesKAM/Genisi-users` for persistent encrypted user data, and uses the public `Qwen/Qwen3.5-Omni-Offline-Demo` Space for language inference.
 
 See [README-AR.md](README-AR.md) for deployment on Render, Railway, VPS, or any Docker host.
 

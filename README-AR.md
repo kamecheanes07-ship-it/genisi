@@ -1,6 +1,6 @@
 # Genisi 4 Atlas — Portable Secure Release 58.65.6 (Windows 12 Embedded System Prompt)
 
-هذه النسخة **مستقلة عن Hugging Face Spaces**. يمكن تشغيلها على أي استضافة تدعم Docker أو Python/ASGI (مثل Render أو Railway أو VPS أو أي مزود حاويات). تظل خدمات Hugging Face متصلة بها من جهة الخادم: تُحفظ الحسابات والذاكرة والمحادثات في Dataset الخاصة `AnesKAM/Genisi-users`، ويمكن اختيار Hugging Face Inference Providers لتشغيل نموذج الوكيل.
+يمكن استضافة هذه النسخة **خارج Hugging Face Spaces**. يمكن تشغيلها على أي استضافة تدعم Docker أو Python/ASGI (مثل Render أو Railway أو VPS أو أي مزود حاويات). تظل خدمات Hugging Face متصلة بها من جهة الخادم: تُحفظ الحسابات والذاكرة والمحادثات في Dataset الخاصة `AnesKAM/Genisi-users`، ويستخدم نموذج اللغة مساحة `Qwen/Qwen3.5-Omni-Offline-Demo`.
 
 > GitHub هو مكان لحفظ الكود وإدارة الإصدارات، وليس بحد ذاته خادم FastAPI. GitHub Pages لا يشغّل هذا التطبيق الكامل ولا يحمي أسرار Hugging Face. استخدم GitHub للمستودع، ثم اربطه بخدمة استضافة Backend تدعم Docker. الواجهة والـAPI في هذه الحزمة يعملان من نفس الخادم/النطاق لتبقى Cookies وCSRF آمنة.
 
@@ -31,8 +31,7 @@ Browser
 Genisi FastAPI + HTML + Node.js workspace (Docker)
   ├── Hugging Face Hub Dataset API
   │     └── AnesKAM/Genisi-users (private, encrypted records)
-  ├── Hugging Face Inference Providers (optional model provider)
-  └── Qwen-compatible API (optional alternative)
+  └── Qwen/Qwen3.5-Omni-Offline-Demo (language model)
 ```
 
 ## الملفات
@@ -56,7 +55,7 @@ static/
 
 ## أسرار Hugging Face — لا تعتمد على Spaces
 
-أنشئ Fine-grained token جديدًا من Hugging Face، بصلاحية الكتابة إلى Dataset `AnesKAM/Genisi-users` فقط (وأضف صلاحية Inference Providers إذا أردت تشغيل النموذج عبر Hugging Face). خزّنه في صفحة Environment/Secrets لدى مزود الاستضافة باسم `HF_TOKEN`.
+أنشئ Fine-grained token جديدًا من Hugging Face، بصلاحية الكتابة إلى Dataset `AnesKAM/Genisi-users` فقط. خزّنه في صفحة Environment/Secrets لدى مزود الاستضافة باسم `HF_TOKEN`.
 
 **لا تضع الرمز في HTML أو JavaScript أو GitHub repository أو أي ملف `.env` ترفعه إلى Git.** ملف `.env.example` يوضح أسماء المتغيرات فقط ولا يحتوي أسرارًا.
 
@@ -76,26 +75,11 @@ static/
 | `COOKIE_SECURE` | `1` عند استخدام HTTPS (موصى به دائمًا في الإنتاج) |
 | `COOKIE_SAMESITE` | `none` عند تشغيل Space داخل إطار Hugging Face؛ يتطلب `COOKIE_SECURE=1` |
 
-### اختيارية للوكيل
+### نموذج اللغة والوكيل
 
-إما استخدام Hugging Face Inference Providers:
+يستخدم التطبيق مساحة [Qwen/Qwen3.5-Omni-Offline-Demo](https://qwen-qwen3-5-omni-offline-demo.hf.space) فقط لطلبات اللغة، بما فيها الوكيل. لا يلزم مفتاح DashScope أو إعداد مزود نموذج منفصل؛ يحتفظ `HF_TOKEN` بوظيفته للتخزين ويمكن استخدامه للوصول إلى المساحة. لا تتحول الطلبات تلقائياً إلى نموذج آخر عند تعطل المساحة أو بلوغ حد الطلبات. تُرسل الرسائل والمرفقات المقدمة للنموذج إلى المساحة الخارجية؛ لا تضع فيها أسراراً لا تريد مشاركتها معها.
 
-| الاسم | القيمة |
-|---|---|
-| `HF_INFERENCE_MODEL` | معرّف نموذج متاح لحسابك عبر Inference Providers، بصيغة المزود/النموذج التي تدعمها الخدمة |
-
-في هذه الحالة يستخدم الخادم `HF_TOKEN` نفسه للاتصال بـ `https://router.huggingface.co/v1`، ولا يرسل الرمز إلى المتصفح.
-
-أو استخدم مزود Qwen/OpenAI-compatible منفصلًا:
-
-| الاسم | القيمة |
-|---|---|
-| `QWEN_BASE_URL` | عنوان API متوافق مع OpenAI |
-| `QWEN_API_KEY` | مفتاح المزود |
-| `QWEN_MODEL` | اسم النموذج لدى المزود |
-| `QWEN_DISABLE_THINKING` | `false` افتراضيًا؛ اجعله `true` لإيقاف التفكير إذا كان مزودك لا يدعمه |
-
-إذا لم تُضبط إعدادات أحد مزودي النماذج، تبقى المصادقة والتخزين عبر Hugging Face متاحين، لكن مسار Agent الخادمي لن يستطيع استدعاء نموذج حتى تضبط مزودًا.
+المساحة تقدم واجهة نصية عبر Gradio ولا تعرض استدعاء أدوات OpenAI الأصلي؛ يستخدم الوكيل بروتوكول JSON نصياً للأدوات، وقد لا يلتزم النموذج به دائماً. تُنفذ الأدوات المتاحة فقط بعد التحقق من صيغة الطلب، ويظل مشغل مساحة العمل المحلي خاضعاً لإعدادات المالك أدناه. إجابة الوكيل الخادمي تنتظر اكتمال رد المساحة قبل عرضها، بينما تدفق المحادثة المعتاد يبقى متاحاً.
 
 ### متغيرات اختيارية أخرى
 
@@ -143,7 +127,7 @@ docker run --env-file .env -p 8000:8000 genisi:58.65.5
 ## ما يتصل بـ Hugging Face تحديدًا؟
 
 - **Hub Dataset API:** مصدر التخزين الدائم للحسابات والتفضيلات وسجل المحادثات؛ ليس تخزينًا محليًا تابعًا لمضيف التطبيق.
-- **Inference Providers:** خيار لتشغيل نموذج الوكيل من خلال Hugging Face Router عند ضبط `HF_INFERENCE_MODEL` ومنح الرمز صلاحية الاستدلال.
+- **مساحة Qwen:** تستخدم للمحادثة والوكيل عبر واجهة Gradio؛ يتوقف الاستدلال على توفر المساحة وحدودها.
 - نقل التطبيق بين Render وRailway وVPS وSpaces لا يغير Dataset ID أو السجلات؛ ما دمت تستخدم `HF_TOKEN` نفسه و`SESSION_SECRET` نفسه.
 
 ## الأمان والحدود الحالية
