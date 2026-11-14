@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import codecs
 import hashlib
 import hmac
 import html as html_mod
@@ -15,7 +16,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import unquote, urljoin, urlsplit
+from urllib.parse import quote, unquote, urljoin, urlsplit
 
 import httpx
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
@@ -45,7 +46,9 @@ APP_NAME = "AnesNT Genisi"
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
 ENVIRONMENT = os.getenv("ENVIRONMENT", "production").lower()
 QWEN_OMNI_SPACE_URL = os.getenv("QWEN_OMNI_SPACE_URL", "https://qwen-qwen3-5-omni-offline-demo.hf.space").rstrip("/")
+QWEN_MODELSCOPE_MIRROR_URL = os.getenv("QWEN_MODELSCOPE_MIRROR_URL", "https://qwen-qwen3-5-omni-offline-demo.ms.show").rstrip("/")
 QWEN3_OMNI_FALLBACK_URL = os.getenv("QWEN3_OMNI_FALLBACK_URL", "https://qwen-qwen3-omni-demo.hf.space").rstrip("/")
+POLLINATIONS_OPENAI_URL = os.getenv("POLLINATIONS_OPENAI_URL", "https://text.pollinations.ai/openai").strip()
 OMEGATECH_AI_BASE_URL = os.getenv("OMEGATECH_AI_BASE_URL", "https://api.omegatech.app/api/ai").rstrip("/")
 STEPAUDIO_MUSIC_SPACE_URL = os.getenv("STEPAUDIO_MUSIC_SPACE_URL", "https://stepfun-ai-stepaudio-3-music.hf.space").rstrip("/")
 VOXCPM_SPACE_URL = os.getenv("VOXCPM_SPACE_URL", "https://openbmb-voxcpm-demo.hf.space").rstrip("/")
@@ -181,6 +184,8 @@ def health() -> dict[str, Any]:
         "hosting_mode": "self-hosted-backend",
         "huggingface_dataset": os.getenv("GENISI_DATASET_ID", "AnesKAM/Genisi-users"),
         "media_ttl_days": MEDIA_TTL_DAYS,
+        "qwen_omni_space": QWEN_OMNI_SPACE_URL,
+        "qwen_modelscope_mirror": QWEN_MODELSCOPE_MIRROR_URL,
         "voxcpm_space": VOXCPM_SPACE_URL,
         "stepaudio_music_space": STEPAUDIO_MUSIC_SPACE_URL,
         "windows12_prompt": windows12_prompt_metadata(),
@@ -508,24 +513,55 @@ def _hf_space_headers(
     space_url: str,
     *,
     include_auth: bool = True,
+    accept: str = "application/json",
     extra: dict[str, str] | None = None,
 ) -> dict[str, str]:
     base = (space_url or "").rstrip("/")
+    host = (urlsplit(base).hostname or "").lower()
     hdrs: dict[str, str] = {
-        "User-Agent": _DEFAULT_OUTBOUND_HEADERS["User-Agent"],
-        "Accept": "*/*",
+        "User-Agent": "gradio_client/1.8.0 (Python/3.11; Genisi-Atlas)",
+        "Accept": accept,
     }
-    if base.startswith(("http://", "https://")):
-        hdrs["Origin"] = base
-        hdrs["Referer"] = base + "/"
+    if host.endswith(".ms.show"):
+        hdrs["Referer"] = "https://www.modelscope.cn/"
     if include_auth:
         tok = _get_hf_token()
-        host = (urlsplit(base).hostname or "").lower()
         if tok and (host.endswith(".hf.space") or host.endswith("huggingface.co")):
-            hdrs["Authorization"] = f"Bearer {tok}"
+            bad_ts = float(_qwen_meta_cache.get(f"bad_tok:{tok[:12]}") or 0.0)
+            if time.time() - bad_ts > 900.0:
+                hdrs["Authorization"] = f"Bearer {tok}"
     if extra:
         hdrs.update(extra)
     return hdrs
+
+
+async def _ensure_modelscope_session(client: httpx.AsyncClient, space_url: str) -> None:
+    """Warm up ModelScope Studio (.ms.show) cookies via GET so POST /gradio_api/call never hits a 302->GET redirect."""
+    base = (space_url or "").rstrip("/")
+    host = (urlsplit(base).hostname or "").lower()
+    if not host.endswith(".ms.show"):
+        return
+    cache_key = f"ms_cookies:{base}"
+    cached = _qwen_meta_cache.get(cache_key)
+    now = time.time()
+    if isinstance(cached, dict) and now - float(cached.get("ts") or 0.0) < 900.0:
+        for ck_name, ck_val in (cached.get("cookies") or {}).items():
+            client.cookies.set(ck_name, ck_val)
+        return
+    try:
+        r_warm = await client.get(
+            f"{base}/gradio_api/info",
+            headers=_hf_space_headers(base, include_auth=False, accept="application/json"),
+            timeout=10.0,
+        )
+        if r_warm.status_code < 400:
+            _qwen_meta_cache[cache_key] = {
+                "ts": now,
+                "cookies": {k: v for k, v in client.cookies.items()},
+            }
+            _qwen_meta_cache[f"prefix:{base}"] = "/gradio_api"
+    except Exception:
+        pass
 
 
 async def _hf_request_with_retry(
@@ -537,27 +573,45 @@ async def _hf_request_with_retry(
     extra_headers: dict[str, str] | None = None,
     **kwargs: Any,
 ) -> httpx.Response:
-    """Send an HTTP request to a Hugging Face Space with HF_TOKEN auth and 429/5xx resilience."""
-    has_token = bool(_get_hf_token())
-    auth_modes = [True, False, True] if has_token else [False, False]
-    last_res: httpx.Response | None = None
+    """Send an HTTP request to a Gradio Space (HF or ModelScope) with auth & instant 429 mirror failover."""
+    base = (space_url or "").rstrip("/")
+    host = (urlsplit(base).hostname or "").lower()
     verb = method.upper()
+    if host.endswith(".ms.show") and verb == "POST":
+        await _ensure_modelscope_session(client, base)
 
-    for idx, use_auth in enumerate(auth_modes):
-        hdrs = _hf_space_headers(space_url, include_auth=use_auth, extra=extra_headers)
-        if verb == "POST":
-            res = await client.post(url, headers=hdrs, **kwargs)
-        else:
-            res = await client.get(url, headers=hdrs, **kwargs)
-        last_res = res
-        if res.status_code < 400:
+    tok = _get_hf_token()
+    can_auth = bool(
+        tok
+        and (host.endswith(".hf.space") or host.endswith("huggingface.co"))
+        and (time.time() - float(_qwen_meta_cache.get(f"bad_tok:{tok[:12]}") or 0.0) > 900.0)
+    )
+    auth_modes = [True, False] if can_auth else [False]
+    last_res: httpx.Response | None = None
+
+    for use_auth in auth_modes:
+        for retry_5xx in range(2):
+            hdrs = _hf_space_headers(base, include_auth=use_auth, extra=extra_headers)
+            if verb == "POST":
+                res = await client.post(url, headers=hdrs, **kwargs)
+            else:
+                res = await client.get(url, headers=hdrs, **kwargs)
+            last_res = res
+            if res.status_code < 400:
+                _qwen_meta_cache.pop(f"throttled:{base}", None)
+                return res
+            if res.status_code in {401, 403} and use_auth:
+                if tok:
+                    _qwen_meta_cache[f"bad_tok:{tok[:12]}"] = time.time()
+                break
+            if res.status_code == 429:
+                # Immediately mark this mirror throttled so caller fails over to the next mirror without delay
+                _qwen_meta_cache[f"throttled:{base}"] = time.time() + 75.0
+                return res
+            if res.status_code in {502, 503, 504} and retry_5xx == 0:
+                await asyncio.sleep(0.28 + random.uniform(0.02, 0.14))
+                continue
             return res
-        if res.status_code in {401, 403} and use_auth:
-            continue
-        if res.status_code in {429, 502, 503, 504} and idx + 1 < len(auth_modes):
-            await asyncio.sleep(0.35 + (0.35 * idx) + random.uniform(0.02, 0.18))
-            continue
-        return res
     assert last_res is not None
     return last_res
 
@@ -823,16 +877,25 @@ def _sniff_image_mime(raw: bytes) -> str:
 
 
 def _qwen_gradio_candidates() -> list[str]:
-    out: list[str] = []
+    base_list: list[str] = []
     for raw in [
         QWEN_OMNI_SPACE_URL,
+        QWEN_MODELSCOPE_MIRROR_URL,
         QWEN3_OMNI_FALLBACK_URL,
         *[u.strip() for u in os.getenv("QWEN_EXTRA_SPACE_URLS", "").split(",") if u.strip()],
     ]:
         cleaned = (raw or "").strip().rstrip("/")
-        if cleaned.startswith(("http://", "https://")) and cleaned not in out:
-            out.append(cleaned)
-    return out
+        if cleaned.startswith(("http://", "https://")) and cleaned not in base_list:
+            base_list.append(cleaned)
+
+    now = time.time()
+    healthy = [u for u in base_list if now >= float(_qwen_meta_cache.get(f"throttled:{u}") or 0.0)]
+    throttled = [u for u in base_list if u not in healthy]
+    pref = str(_qwen_meta_cache.get("preferred_space") or "")
+    pref_ts = float(_qwen_meta_cache.get("preferred_ts") or 0.0)
+    if pref and pref in healthy and (now - pref_ts) < 240.0:
+        healthy = [pref] + [u for u in healthy if u != pref]
+    return healthy + throttled
 
 
 def _prune_qwen_uploads() -> None:
@@ -1001,39 +1064,85 @@ async def _remap_file_data_for_space(
     return fd
 
 
+def _normalize_qwen_chat_predict_args(data: list[Any]) -> list[Any]:
+    """Normalize the 9-arg Qwen3.5-Omni-Offline-Demo chat_predict payload to match app.py."""
+    if len(data) != 9:
+        return list(data)
+    text = str(data[0]) if data[0] is not None else ""
+    audio_fd = data[1] if isinstance(data[1], dict) else None
+    image_fd = data[2] if isinstance(data[2], dict) else None
+    video_fd: dict[str, Any] | None = None
+    if isinstance(data[3], dict):
+        if isinstance(data[3].get("video"), dict):
+            video_fd = {"video": data[3]["video"], "subtitles": data[3].get("subtitles")}
+        elif data[3].get("path"):
+            video_fd = {"video": data[3], "subtitles": None}
+
+    clean_hist: list[dict[str, str]] = []
+    if isinstance(data[4], list):
+        for item in data[4]:
+            if not isinstance(item, dict):
+                continue
+            role = str(item.get("role") or "").strip()
+            cnt = item.get("content")
+            if role in {"user", "assistant"} and isinstance(cnt, str) and cnt != "":
+                clean_hist.append({"role": role, "content": cnt})
+
+    sys_prompt = str(data[5]) if data[5] is not None else ""
+    try:
+        temp = round(max(0.1, min(2.0, float(data[6] if data[6] is not None else 0.7))), 3)
+    except Exception:
+        temp = 0.7
+    try:
+        top_p = round(max(0.05, min(1.0, float(data[7] if data[7] is not None else 0.8))), 3)
+    except Exception:
+        top_p = 0.8
+    try:
+        top_k = int(max(1, min(100, round(float(data[8] if data[8] is not None else 20)))))
+    except Exception:
+        top_k = 20
+
+    return [text, audio_fd, image_fd, video_fd, clean_hist, sys_prompt, temp, top_p, top_k]
+
+
 async def _adapt_qwen_data_for_space(
     client: httpx.AsyncClient,
     data: list[Any],
     space_url: str,
 ) -> list[Any]:
-    if len(data) < 9:
-        return list(data)
-    audio_fd = await _remap_file_data_for_space(client, data[1], space_url)
-    image_fd = await _remap_file_data_for_space(client, data[2], space_url)
-    video_fd = await _remap_file_data_for_space(client, data[3], space_url)
-    if space_url == QWEN3_OMNI_FALLBACK_URL and space_url != QWEN_OMNI_SPACE_URL and len(data) == 9:
+    norm = _normalize_qwen_chat_predict_args(data)
+    if len(norm) < 9:
+        return norm
+    audio_fd = await _remap_file_data_for_space(client, norm[1], space_url)
+    image_fd = await _remap_file_data_for_space(client, norm[2], space_url)
+    video_fd = await _remap_file_data_for_space(client, norm[3], space_url)
+    if (
+        space_url == QWEN3_OMNI_FALLBACK_URL
+        and space_url not in {QWEN_OMNI_SPACE_URL, QWEN_MODELSCOPE_MIRROR_URL}
+        and len(norm) == 9
+    ):
         # Qwen/Qwen3-Omni-Demo /chat_predict signature (12 positional args):
         # [text, audio, image, video, history, system_prompt, voice_choice, temperature, top_p, top_k, return_audio, enable_thinking]
         return [
-            data[0],
+            norm[0],
             audio_fd,
             image_fd,
             video_fd,
-            data[4],
-            data[5],
+            norm[4],
+            norm[5],
             "Cherry / 芊悦",
-            data[6],
-            data[7],
-            data[8],
+            norm[6],
+            norm[7],
+            norm[8],
             False,
             False,
         ]
     return [
-        data[0],
+        norm[0],
         audio_fd,
         image_fd,
         video_fd,
-        *data[4:],
+        *norm[4:],
     ]
 
 
@@ -1107,6 +1216,11 @@ def _extract_qwen_assistant_text(payload: Any) -> str | None:
 def _extract_omegatech_reply(obj: Any) -> str:
     if not isinstance(obj, dict):
         return ""
+    choices = obj.get("choices")
+    if isinstance(choices, list) and choices:
+        msg = (choices[0] or {}).get("message") if isinstance(choices[0], dict) else None
+        if isinstance(msg, dict) and isinstance(msg.get("content"), str) and msg["content"].strip():
+            return msg["content"].strip()
     for path in (
         ("data", "reply"),
         ("data", "response"),
@@ -1135,45 +1249,162 @@ def _extract_omegatech_reply(obj: Any) -> str:
     return ""
 
 
+def _trim_to_encoded_bytes(text: str, max_encoded_bytes: int = 4600) -> str:
+    """Ensure a string stays safely under HTTP GET query-string byte limits even for Arabic UTF-8."""
+    val = (text or "").strip()
+    if len(quote(val, safe="")) <= max_encoded_bytes:
+        return val
+    lo, hi = 0, len(val)
+    best = ""
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        cand = val[-mid:] if mid > 0 else ""
+        if len(quote(cand, safe="")) <= max_encoded_bytes:
+            best = cand
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best.strip() or val[:400]
+
+
+def _compact_system_prompt(sys_prompt: str, max_chars: int = 8000) -> str:
+    """Keep both the core identity opening and the tool/file tail of buildSystem()."""
+    s = (sys_prompt or "").strip()
+    if len(s) <= max_chars:
+        return s
+    head_len = max_chars // 2
+    tail_len = max_chars - head_len - 16
+    return s[:head_len].rstrip() + "\n\n...\n\n" + s[-tail_len:].lstrip()
+
+
+async def _dashscope_qwen35_direct(
+    client: httpx.AsyncClient,
+    data: list[Any],
+) -> str | None:
+    """Optional zero-Gradio direct DashScope qwen3.5-omni-plus path when DASHSCOPE_API_KEY is configured."""
+    api_key = (os.getenv("DASHSCOPE_API_KEY") or "").strip()
+    if not api_key or any(bool(data[idx]) for idx in (1, 2, 3) if len(data) > idx):
+        return None
+    norm = _normalize_qwen_chat_predict_args(data)
+    user_text = str(norm[0] or "")
+    history = norm[4] if len(norm) > 4 and isinstance(norm[4], list) else []
+    sys_prompt = str(norm[5] or "")
+    temp = float(norm[6]) if len(norm) > 6 else 0.7
+    top_p = float(norm[7]) if len(norm) > 7 else 0.8
+    top_k = int(norm[8]) if len(norm) > 8 else 20
+
+    messages: list[dict[str, Any]] = []
+    if sys_prompt:
+        messages.append({"role": "system", "content": sys_prompt})
+    for h in history:
+        messages.append({"role": h["role"], "content": [{"type": "text", "text": h["content"]}]})
+    if user_text:
+        messages.append({"role": "user", "content": [{"type": "text", "text": user_text}]})
+    if not messages:
+        return None
+
+    base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1").rstrip("/")
+    res = await client.post(
+        f"{base_url}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+        json={
+            "model": os.getenv("DASHSCOPE_OMNI_MODEL", "qwen3.5-omni-plus"),
+            "messages": messages,
+            "modalities": ["text"],
+            "temperature": temp,
+            "top_p": top_p,
+            "extra_body": {"top_k": top_k},
+        },
+        timeout=90.0,
+    )
+    if res.status_code >= 400:
+        return None
+    return _extract_omegatech_reply(res.json()) or None
+
+
 async def _omegatech_chat_fallback(client: httpx.AsyncClient, data: list[Any]) -> str:
-    """Free non-HF-Space fallback (api.omegatech.app) when all *.hf.space backends hit 429/5xx."""
-    user_text = str(data[0] or "").strip() if len(data) > 0 else ""
-    has_binary_only = not user_text and any(bool(data[idx]) for idx in (1, 2, 3) if len(data) > idx)
+    """Free non-Gradio fallback (POST OpenAI-compatible + byte-safe GET Omegatech) when all Gradio mirrors fail."""
+    norm = _normalize_qwen_chat_predict_args(data)
+    user_text = str(norm[0] or "").strip() if len(norm) > 0 else ""
+    has_binary_only = not user_text and any(bool(norm[idx]) for idx in (1, 2, 3) if len(norm) > idx)
     if has_binary_only:
         raise RuntimeError("المرفق الصوتي أو المرئي يتطلب محرك الوسائط المتعددة المشغول حالياً — أعد المحاولة بعد ثوانٍ")
 
-    history = data[4] if len(data) > 4 and isinstance(data[4], list) else []
-    sys_prompt = str(data[5] or "").strip() if len(data) > 5 else ""
+    history = norm[4] if len(norm) > 4 and isinstance(norm[4], list) else []
+    sys_prompt = str(norm[5] or "").strip() if len(norm) > 5 else ""
+    temp = float(norm[6]) if len(norm) > 6 else 0.7
     if len(sys_prompt) > 20000 and "WINDOWS 12 BUILT-IN DESIGN MODE" in sys_prompt:
         raise RuntimeError("محرك تصميم Windows 12 مشغول مؤقتاً — أعد المحاولة بعد لحظات")
 
+    last_err = "unknown"
+
+    # 1) POST JSON OpenAI-compatible fallback (no GET URL length ceiling; preserves tool/file system instructions)
+    if POLLINATIONS_OPENAI_URL:
+        try:
+            oa_messages: list[dict[str, str]] = []
+            if sys_prompt:
+                oa_messages.append({"role": "system", "content": _compact_system_prompt(sys_prompt, 12000)})
+            for item in history[-12:]:
+                if isinstance(item, dict):
+                    r_role = "assistant" if item.get("role") == "assistant" else "user"
+                    cnt = str(item.get("content") or "").strip()
+                    if cnt:
+                        oa_messages.append({"role": r_role, "content": cnt[:2400]})
+            if user_text:
+                oa_messages.append({"role": "user", "content": user_text[:6000]})
+            if oa_messages:
+                r_post = await client.post(
+                    POLLINATIONS_OPENAI_URL,
+                    headers={
+                        "User-Agent": _DEFAULT_OUTBOUND_HEADERS["User-Agent"],
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                    },
+                    json={
+                        "model": "openai-fast",
+                        "messages": oa_messages,
+                        "temperature": min(1.5, max(0.1, temp)),
+                    },
+                    timeout=65.0,
+                )
+                if r_post.status_code < 400:
+                    post_reply = _extract_omegatech_reply(r_post.json())
+                    if post_reply:
+                        return post_reply
+                else:
+                    last_err = f"POST HTTP {r_post.status_code}"
+        except Exception as exc:
+            last_err = str(exc)[:160]
+
+    # 2) Byte-safe (<4.6 KB URL-encoded) GET fallback via api.omegatech.app so HTTP 414 never occurs on Arabic text
     parts: list[str] = []
     if sys_prompt:
-        parts.append("[System Instructions]\n" + sys_prompt[:2200])
+        parts.append("[System]\n" + _compact_system_prompt(sys_prompt, 900))
     recent_turns: list[str] = []
-    for item in history[-8:]:
+    for item in history[-4:]:
         if isinstance(item, dict):
             role = "Assistant" if item.get("role") == "assistant" else "User"
             cnt = str(item.get("content") or "").strip()
             if cnt:
-                recent_turns.append(f"{role}: {cnt[:600]}")
+                recent_turns.append(f"{role}: {cnt[:280]}")
     if recent_turns:
-        parts.append("[Conversation History]\n" + "\n".join(recent_turns)[-1800:])
+        parts.append("[History]\n" + "\n".join(recent_turns)[-700:])
     if user_text:
-        parts.append("[User]\n" + user_text[:2200])
-    composite = "\n\n".join(parts).strip() or "Hello"
-    if len(composite) > 5400:
-        composite = composite[-5400:]
+        parts.append("[User]\n" + user_text[:1200])
+    composite = _trim_to_encoded_bytes("\n\n".join(parts).strip() or "Hello", max_encoded_bytes=4500)
 
     providers = [
         (f"{OMEGATECH_AI_BASE_URL}/Deep-ai", {"action": "chat", "message": composite, "model": "deepseek-v3.2"}),
         (f"{OMEGATECH_AI_BASE_URL}/Gemini2", {"action": "chat", "message": composite}),
         (f"{OMEGATECH_AI_BASE_URL}/Chatgpt-v2", {"action": "chat", "message": composite}),
     ]
-    last_err = "unknown"
     for endpoint_url, params in providers:
         try:
-            res = await client.get(endpoint_url, params=params, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=75.0)
+            res = await client.get(endpoint_url, params=params, headers=_DEFAULT_OUTBOUND_HEADERS, timeout=65.0)
             if res.status_code >= 400:
                 last_err = f"HTTP {res.status_code}"
                 continue
@@ -1189,10 +1420,11 @@ async def _omegatech_chat_fallback(client: httpx.AsyncClient, data: list[Any]) -
 async def qwen_model_info(request: Request, endpoint: str = "chat_predict") -> dict[str, Any]:
     """Return Qwen3.5-Omni gateway readiness immediately without burning upstream HF rate limits."""
     chosen = endpoint.strip().strip("/") or "chat_predict"
-    prefix = str(_qwen_meta_cache.get(f"prefix:{QWEN_OMNI_SPACE_URL}") or "/gradio_api")
+    active_space = str(_qwen_meta_cache.get("preferred_space") or QWEN_OMNI_SPACE_URL)
+    prefix = str(_qwen_meta_cache.get(f"prefix:{active_space}") or "/gradio_api")
     return {
         "ok": True,
-        "space": QWEN_OMNI_SPACE_URL,
+        "space": active_space,
         "prefix": prefix,
         "endpoint": chosen,
         "schema": {},
@@ -1249,7 +1481,7 @@ async def qwen_model_upload(
 
 @app.post("/api/models/qwen/stream")
 async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...)) -> StreamingResponse:
-    """Stream Qwen Gradio SSE via Python with HF_TOKEN auth, instant 200 SSE headers, and 3-tier failover."""
+    """Stream Qwen3.5-Omni-Offline-Demo SSE via Python across HF + ModelScope mirrors with UTF-8 safety & failover."""
     data = payload.get("data")
     if not isinstance(data, list):
         raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
@@ -1260,6 +1492,22 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
         yield b": connected\n\n"
         errors: list[str] = []
         async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=15.0), follow_redirects=True) as client:
+            # Optional direct DashScope qwen3.5-omni-plus when DASHSCOPE_API_KEY is configured
+            if os.getenv("DASHSCOPE_API_KEY", "").strip():
+                try:
+                    direct_reply = await _dashscope_qwen35_direct(client, data)
+                    if direct_reply:
+                        norm = _normalize_qwen_chat_predict_args(data)
+                        in_hist = list(norm[4]) if len(norm) > 4 and isinstance(norm[4], list) else []
+                        if norm[0]:
+                            in_hist.append({"role": "user", "content": str(norm[0])})
+                        in_hist.append({"role": "assistant", "content": direct_reply})
+                        frame = json.dumps([None, None, None, None, in_hist], ensure_ascii=False)
+                        yield f"event: generating\ndata: {frame}\n\nevent: complete\ndata: {frame}\n\n".encode("utf-8")
+                        return
+                except Exception as exc:
+                    errors.append(f"dashscope: {str(exc)[:140]}")
+
             for space_url in _qwen_gradio_candidates():
                 try:
                     call_url, event_id = await _start_qwen_gradio_call(client, data, endpoint, space_url)
@@ -1275,20 +1523,45 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
                     async with client.stream(
                         "GET",
                         f"{call_url}/{event_id}",
-                        headers=_hf_space_headers(space_url),
+                        headers=_hf_space_headers(space_url, accept="text/event-stream"),
                         timeout=180.0,
                     ) as upstream:
                         if upstream.status_code >= 400:
+                            if upstream.status_code == 429:
+                                _qwen_meta_cache[f"throttled:{space_url}"] = time.time() + 75.0
                             err_txt = (await upstream.aread()).decode("utf-8", errors="replace")[:180]
                             errors.append(f"{space_url} SSE HTTP {upstream.status_code}: {err_txt}")
                             continue
 
+                        decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
                         buf = ""
                         aborted_upstream = False
-                        async for raw_chunk in upstream.aiter_bytes():
-                            if not raw_chunk:
+                        chunk_iter = upstream.aiter_bytes().__aiter__()
+                        idle_ticks = 0
+
+                        while True:
+                            try:
+                                raw_chunk = await asyncio.wait_for(chunk_iter.__anext__(), timeout=15.0)
+                                idle_ticks = 0
+                                eof = False
+                            except asyncio.TimeoutError:
+                                idle_ticks += 1
+                                if idle_ticks >= 11:
+                                    errors.append(f"{space_url}: SSE stream timed out")
+                                    aborted_upstream = True
+                                    break
+                                yield b": keepalive\n\n"
                                 continue
-                            buf += raw_chunk.decode("utf-8", errors="replace").replace("\r\n", "\n")
+                            except StopAsyncIteration:
+                                raw_chunk = b""
+                                eof = True
+
+                            decoded = decoder.decode(raw_chunk, final=eof)
+                            if decoded:
+                                buf += decoded.replace("\r\n", "\n")
+                            if eof and buf.strip() and not buf.endswith("\n\n"):
+                                buf += "\n\n"
+
                             while "\n\n" in buf:
                                 block, buf = buf.split("\n\n", 1)
                                 stripped = block.strip()
@@ -1309,25 +1582,39 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
                                         break
                                     yield (stripped + "\n\n").encode("utf-8")
                                     return
-                                if ev_name in {"generating", "complete"} and raw_ev_data and raw_ev_data != "null":
-                                    try:
-                                        extracted = _extract_qwen_assistant_text(json.loads(raw_ev_data))
-                                        if extracted:
-                                            emitted_text = True
-                                    except Exception:
-                                        pass
-                                    if ev_name == "complete" and emitted_text:
-                                        completed_ok = True
-                                yield (stripped + "\n\n").encode("utf-8")
-                            if aborted_upstream:
-                                break
-                        if not aborted_upstream and buf.strip():
-                            tail = buf.strip()
-                            if "event: error" not in tail:
-                                if "event: complete" in tail:
+                                if ev_name in {"generating", "complete"}:
+                                    extracted: str | None = None
+                                    if raw_ev_data and raw_ev_data != "null":
+                                        try:
+                                            extracted = _extract_qwen_assistant_text(json.loads(raw_ev_data))
+                                        except Exception:
+                                            extracted = None
+                                    if extracted:
+                                        emitted_text = True
+                                    if ev_name == "generating":
+                                        if emitted_text:
+                                            yield (stripped + "\n\n").encode("utf-8")
+                                        continue
+                                    # ev_name == "complete": never forward an empty completion before emitted_text
+                                    if not emitted_text:
+                                        errors.append(f"{space_url}: empty assistant completion")
+                                        aborted_upstream = True
+                                        break
                                     completed_ok = True
-                                yield (tail + "\n\n").encode("utf-8")
+                                    _qwen_meta_cache["preferred_space"] = space_url
+                                    _qwen_meta_cache["preferred_ts"] = time.time()
+                                    yield (stripped + "\n\n").encode("utf-8")
+                                    return
+                                # Forward heartbeat/process_starts comments harmlessly, never premature completion
+                                if ev_name == "heartbeat":
+                                    yield b": heartbeat\n\n"
+
+                            if aborted_upstream or eof:
+                                break
+
                         if emitted_text or completed_ok:
+                            _qwen_meta_cache["preferred_space"] = space_url
+                            _qwen_meta_cache["preferred_ts"] = time.time()
                             return
                 except asyncio.CancelledError:
                     raise
@@ -1338,12 +1625,13 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
                     errors.append(f"{space_url}: {str(exc)[:160]}")
                     continue
 
-            # Tier 3: Non-HF-Space fallback (api.omegatech.app) so chat stays 100% live even if *.hf.space returns 429
+            # Final emergency fallback (POST OpenAI-compatible + byte-safe Omegatech) if all Qwen Gradio mirrors fail
             try:
                 yield b": fallback\n\n"
                 reply = await _omegatech_chat_fallback(client, data)
-                in_hist = list(data[4]) if len(data) > 4 and isinstance(data[4], list) else []
-                user_msg = str(data[0] or "") if len(data) > 0 else ""
+                norm = _normalize_qwen_chat_predict_args(data)
+                in_hist = list(norm[4]) if len(norm) > 4 and isinstance(norm[4], list) else []
+                user_msg = str(norm[0] or "") if len(norm) > 0 else ""
                 if user_msg:
                     in_hist.append({"role": "user", "content": user_msg})
                 in_hist.append({"role": "assistant", "content": reply})
@@ -1367,7 +1655,7 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
 
 @app.post("/api/models/qwen/once")
 async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Single-turn non-streaming Qwen call via Python with HF_TOKEN auth and 3-tier failover."""
+    """Single-turn non-streaming Qwen3.5-Omni call via Python across HF + ModelScope mirrors with failover."""
     data = payload.get("data")
     if not isinstance(data, list):
         raise HTTPException(422, "الحقل data يجب أن يكون مصفوفة")
@@ -1375,6 +1663,14 @@ async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...))
 
     errors: list[str] = []
     async with httpx.AsyncClient(timeout=80.0, follow_redirects=True) as client:
+        if os.getenv("DASHSCOPE_API_KEY", "").strip():
+            try:
+                direct_reply = await _dashscope_qwen35_direct(client, data)
+                if direct_reply:
+                    return {"ok": True, "text": direct_reply}
+            except Exception as exc:
+                errors.append(f"dashscope: {str(exc)[:140]}")
+
         for space_url in _qwen_gradio_candidates():
             try:
                 call_url, event_id = await _start_qwen_gradio_call(
@@ -1385,33 +1681,44 @@ async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...))
                 async with client.stream(
                     "GET",
                     f"{call_url}/{event_id}",
-                    headers=_hf_space_headers(space_url),
+                    headers=_hf_space_headers(space_url, accept="text/event-stream"),
                     timeout=65.0,
                 ) as sse:
                     if sse.status_code >= 400:
+                        if sse.status_code == 429:
+                            _qwen_meta_cache[f"throttled:{space_url}"] = time.time() + 75.0
                         errors.append(f"{space_url} HTTP {sse.status_code}")
                         continue
                     failed_sse = False
-                    async for line in sse.aiter_lines():
-                        if line.startswith("event:"):
-                            cur_event = line[6:].strip()
-                        elif line.startswith("data:"):
-                            raw_data = line[5:].strip()
-                            if cur_event == "error":
-                                errors.append(f"{space_url}: {raw_data[:160]}")
-                                failed_sse = True
-                                break
-                            if cur_event in {"generating", "complete"} and raw_data and raw_data != "null":
-                                try:
-                                    extracted = _extract_qwen_assistant_text(json.loads(raw_data))
-                                    if extracted is not None:
-                                        latest = extracted
-                                except Exception:
-                                    pass
-                                if cur_event == "complete":
+                    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+                    buf = ""
+                    async for raw_chunk in sse.aiter_bytes():
+                        buf += decoder.decode(raw_chunk, final=False).replace("\r\n", "\n")
+                        while "\n" in buf:
+                            line, buf = buf.split("\n", 1)
+                            if line.startswith("event:"):
+                                cur_event = line[6:].strip()
+                            elif line.startswith("data:"):
+                                raw_data = line[5:].strip()
+                                if cur_event == "error":
+                                    errors.append(f"{space_url}: {raw_data[:160]}")
+                                    failed_sse = True
                                     break
+                                if cur_event in {"generating", "complete"} and raw_data and raw_data != "null":
+                                    try:
+                                        extracted = _extract_qwen_assistant_text(json.loads(raw_data))
+                                        if extracted is not None:
+                                            latest = extracted
+                                    except Exception:
+                                        pass
+                        if failed_sse or (cur_event == "complete" and latest):
+                            break
                     if not failed_sse and latest:
+                        _qwen_meta_cache["preferred_space"] = space_url
+                        _qwen_meta_cache["preferred_ts"] = time.time()
                         return {"ok": True, "text": latest}
+                    if not failed_sse and not latest:
+                        errors.append(f"{space_url}: empty assistant completion")
             except Exception as exc:
                 errors.append(str(exc)[:160])
                 continue
