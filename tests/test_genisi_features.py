@@ -423,17 +423,40 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
     def test_frontend_ui_specs_image_square_and_voice_pill_bar(self) -> None:
         html = (REPO_ROOT / "static" / "index.html").read_text(encoding="utf-8")
 
-        # 1) Image Generation minimalist rounded square (image-2.png: 371x364, radius 28px)
+        # 1) Animated moving dot-matrix waiting cards (image-4.png) for image, video, and music
         self.assertIn(".waitcard.img-square", html)
+        self.assertIn(".waitcard.dm-card", html)
+        self.assertIn("function startDotMatrixCanvas(card, kind)", html)
+        self.assertIn("dm-canvas", html)
+        self.assertIn("vid-wait", html)
+        self.assertIn("music-wait", html)
         self.assertRegex(html, r"aspect-ratio:\s*371\s*/\s*364")
         self.assertRegex(html, r"border-radius:\s*28px")
 
-        # 2) Speaking Mode input bar only (image-1.png: 660x64 pill bar, radius 999px), normal composer untouched
+        # 2) Enlarged main capsule composer (wider 880px + taller 82px pill style) + Speaking Mode pill bar (660x64px)
         self.assertIn('id="viewVoice"', html)
         self.assertRegex(html, r"\.voice-pill-bar\s*\{[^}]*width:\s*min\(100%,\s*660px\)[^}]*height:\s*64px[^}]*border-radius:\s*999px")
-        self.assertRegex(html, r"\.composer\s*\{[^}]*border-radius:\s*var\(--r-lg\)")
+        self.assertRegex(html, r"\.composer\s*\{[^}]*width:\s*min\(100%,\s*880px\)[^}]*min-height:\s*82px[^}]*border-radius:\s*999px")
+        self.assertIn("comp-pill-row", html)
 
-        # 3) StepAudio-3-Music & VoxCPM-Demo & Qwen/Image/Video wired strictly via Python /api/* (zero browser proxies)
+        # 3) Live Voice Call UI (image-5.png: bottom glowing blue aurora canvas + Hold || & red End X buttons)
+        self.assertIn('id="voiceAuroraCanvas"', html)
+        self.assertIn("function startVoiceAuroraCanvas()", html)
+        self.assertIn('id="voiceHoldBtn"', html)
+        self.assertIn("function toggleVoiceHold()", html)
+        self.assertIn('id="voiceCloseBtn"', html)
+
+        # 4) Redesigned Studio Audio/Music player (.aud-studio) + Branded Word / Excel / PowerPoint cards (.doc-studio-card)
+        self.assertIn("function buildStudioAudioCard(", html)
+        self.assertIn("aud-studio", html)
+        self.assertIn("aud-wave", html)
+        self.assertIn("function buildStudioDocCard(", html)
+        self.assertIn("doc-studio-card", html)
+        self.assertIn('data-doc-kind="word"', html)
+        self.assertIn('data-doc-kind="excel"', html)
+        self.assertIn('data-doc-kind="ppt"', html)
+
+        # 5) StepAudio-3-Music & VoxCPM-Demo & Qwen/Image/Video wired strictly via Python /api/* (zero browser proxies)
         self.assertIn("/api/music/submit", html)
         self.assertIn("/api/music/query", html)
         self.assertIn("/api/voice/tts", html)
