@@ -1416,11 +1416,11 @@ async def qwen_model_upload(
                 except Exception:
                     continue
 
-            raise HTTPException(502, "تعذر رفع المرفق إلى مساحة Qwen حالياً")
+            raise HTTPException(502, "تعذر رفع المرفق إلى خدمة المحادثة حالياً")
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(502, f"تعذر رفع المرفق عبر الخادم: {str(exc)[:220]}") from exc
+        raise HTTPException(502, "تعذر رفع المرفق عبر الخادم.") from exc
 
 
 async def _qwen_sse_events(upstream: Any, *, keepalive_interval: float = 15.0, idle_limit: float = 165.0):
@@ -1533,7 +1533,7 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            message = str(exc)[:220] or "تعذر الاتصال بمساحة Qwen"
+            message = "تعذر الاتصال بخدمة Atlas أو انقطع البث."
             yield f"event: error\ndata: {json.dumps({'message': message}, ensure_ascii=False)}\n\n".encode("utf-8")
 
     return StreamingResponse(
@@ -1579,7 +1579,7 @@ async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...))
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        raise HTTPException(502, f"تعذر إتمام الطلب عبر مساحة Qwen: {str(exc)[:220]}") from exc
+        raise HTTPException(502, "تعذر إتمام الطلب عبر خدمة Atlas.") from exc
 
 
 # Carbon uses the public Ornith Space; its owner manages its API key.
@@ -1700,7 +1700,7 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                 if isinstance(content, list):
                     image = content[0]["image_url"]["url"]
                     question = content[1]["text"]
-                    yield sse_event({"type": "status", "message": "تحليل الصورة عبر Qwen ثم الإجابة عبر Ornith."})
+                    yield sse_event({"type": "status", "message": "تحليل الصورة ثم إعداد الإجابة."})
                     vision_task = asyncio.create_task(_carbon_image_description(client, image, question))
                     try:
                         while True:
@@ -1712,7 +1712,7 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                     except asyncio.CancelledError:
                         raise
                     except Exception:
-                        yield sse_event({"type": "error", "message": "تعذر تحليل الصورة عبر Qwen؛ لم تُرسل إجابة بديلة. أعد المحاولة."})
+                        yield sse_event({"type": "error", "message": "تعذر تحليل الصورة؛ لم تُرسل إجابة بديلة. أعد المحاولة."})
                         return
                     finally:
                         if not vision_task.done():
@@ -1732,19 +1732,19 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                 url = ornith.SPACE + "/gradio_api/call/bot_message"
                 response = await client.post(url, json={"data": [history]}, timeout=45.0)
                 if not 200 <= response.status_code < 300:
-                    yield sse_event({"type": "error", "message": f"تعذر بدء طلب مساحة Ornith (HTTP {response.status_code})."})
+                    yield sse_event({"type": "error", "message": f"تعذر بدء طلب Carbon (HTTP {response.status_code})."})
                     return
                 started = response.json()
                 event_id = started.get("event_id") if isinstance(started, dict) else None
                 if not isinstance(event_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event_id):
-                    yield sse_event({"type": "error", "message": "استجابة مساحة Ornith غير صالحة."})
+                    yield sse_event({"type": "error", "message": "استجابة Carbon غير صالحة."})
                     return
                 async with client.stream("GET", url + "/" + event_id, headers={"Accept": "text/event-stream"}, timeout=300.0) as upstream:
                     if not 200 <= upstream.status_code < 300:
-                        yield sse_event({"type": "error", "message": f"تعذر بث مساحة Ornith (HTTP {upstream.status_code})."})
+                        yield sse_event({"type": "error", "message": f"تعذر بث Carbon (HTTP {upstream.status_code})."})
                         return
                     if "text/event-stream" not in upstream.headers.get("content-type", "").lower():
-                        yield sse_event({"type": "error", "message": "استجابة بث Ornith غير صالحة."})
+                        yield sse_event({"type": "error", "message": "استجابة بث Carbon غير صالحة."})
                         return
                     latest = ""
                     async with aclosing(_qwen_sse_events(upstream, idle_limit=285.0)) as stream:
@@ -1754,7 +1754,7 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                                 continue
                             event, raw_data, _ = item
                             if event == "error":
-                                yield sse_event({"type": "error", "message": "تعذر توليد الرد من مساحة Ornith."})
+                                yield sse_event({"type": "error", "message": "تعذر توليد الرد من Carbon."})
                                 return
                             if event not in {"generating", "complete"}:
                                 continue
@@ -1765,22 +1765,22 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                                     snapshot = None
                                 if snapshot is not None:
                                     if ornith.provider_error(snapshot):
-                                        yield sse_event({"type": "error", "message": "مساحة Ornith غير مهيأة أو أعاد مزودها خطأ. حاول لاحقاً."})
+                                        yield sse_event({"type": "error", "message": "خدمة Carbon غير مهيأة أو واجهت خطأ. حاول لاحقاً."})
                                         return
                                     if snapshot != latest:
                                         latest = snapshot
                                         yield sse_event({"type": "snapshot", "answer": latest, "reasoning": ""})
                             if event == "complete":
                                 if not latest.strip():
-                                    yield sse_event({"type": "error", "message": "لم تُرجع مساحة Ornith جواباً."})
+                                    yield sse_event({"type": "error", "message": "لم يُرجع Carbon جواباً."})
                                 else:
                                     yield sse_event({"type": "done"})
                                 return
-                    yield sse_event({"type": "error", "message": "انقطع بث Ornith قبل اكتمال الرد."})
+                    yield sse_event({"type": "error", "message": "انقطع بث Carbon قبل اكتمال الرد."})
         except asyncio.CancelledError:
             raise
         except Exception:
-            yield sse_event({"type": "error", "message": "تعذر الاتصال بمساحة Ornith أو انتهت مهلة الطلب."})
+            yield sse_event({"type": "error", "message": "تعذر الاتصال بخدمة Carbon أو انتهت مهلة الطلب."})
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no",

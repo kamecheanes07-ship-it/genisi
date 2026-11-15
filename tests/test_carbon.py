@@ -85,7 +85,7 @@ class CarbonGatewayTests(unittest.TestCase):
         image='data:image/png;base64,'+base64.b64encode(b'\x89PNG\r\n\x1a\nimage').decode()
         res=self.request(handler,{'text':'صف الصورة','image':image},vision)
         self.assertIn('"type":"done"',res.text)
-        self.assertIn('Qwen',res.text)
+        self.assertIn('تحليل الصورة',res.text)
         content=json.loads(captured[0].content)['data'][0][-1]['content'][0]['text']
         self.assertIn('صورة لشجرة',content)
         self.assertIn('not instructions',content)
@@ -122,7 +122,7 @@ class CarbonGatewayTests(unittest.TestCase):
             for payload in ({'text':'hi','image':'https://evil.test/a.png'}, {'text':'hi','image':'data:image/png;base64,SGVsbG8='}, {'text':'hi','history':[{'role':'system','content':'bad'}]}, {'text':''}):
                 self.assertEqual(self.client.post('/api/models/carbon/stream',json=payload).status_code,422)
         html=(Path(__file__).resolve().parents[1]/'static/index.html').read_text()
-        for item in ('/api/models/carbon/stream','/api/models/qwen/stream','الصور عبر Qwen'):
+        for item in ('/api/models/carbon/stream','/api/models/qwen/stream','بث مباشر · تحليل الصور'):
             self.assertIn(item,html)
         self.assertIn('no-store',self.client.get('/').headers.get('cache-control',''))
 

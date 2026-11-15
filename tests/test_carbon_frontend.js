@@ -14,6 +14,7 @@ const context = {
   FileReader: class { readAsDataURL(file) { this.result=file.data; this.onload(); } },
   buildQwenData: text => [text, null, null, null, [{role:'user', content:'prior'}], 'system', 1, .95, 20],
   onText: (answer, reasoning) => snapshots.push([answer, reasoning]),
+  describeExtraImages:async(images)=>images?.length?'[Image 2]\nsecond':'', extraImageContext:(s)=>s?' DATA '+s:'',
   api: async (path, opts) => {
     requests.push({path, opts});
     const events = mode === 'vision'
@@ -48,7 +49,10 @@ vm.runInContext(html.slice(start,end) + '\nthis.carbonProvider=runCarbonProvider
   assert.deepEqual(snapshots.at(-1), ['جديد','تفكير جديد']);
   mode='vision';
   assert.equal(await context.carbonProvider('describe', {image:{size:8,data:'data:image/png;base64,abc'}}, 'first'), 'tree');
-  assert.equal(context.live.userMsg.vision, 'tree');
+  assert.equal(context.live.userMsg.vision, '[Image 1]\ntree');
+  assert.equal(await context.carbonProvider('compare', {image:{size:8,data:'data:image/png;base64,abc'},extraImages:[{}]}, 'first'), 'tree');
+  assert.match(context.live.userMsg.vision,/\[Image 1\]\ntree[\s\S]*\[Image 2\]\nsecond/);
+  assert.match(JSON.parse(requests.at(-1).opts.body).text,/\[Image 2\]/);
   mode='partial';
   await assert.rejects(context.carbonProvider('hello', {}, 'first'), /انقطع بث Carbon/);
   assert.equal(context.ai.busy, false);
