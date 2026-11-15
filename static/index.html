@@ -1772,6 +1772,79 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
   .voice-captions{max-height:52px}
   .voice-pill-bar{height:48px; min-height:48px; max-height:48px}
 }
+/* Genisi welcome and secure sign-in */
+@media(min-width:761px){html:has(#authOverlay.on){zoom:1}}
+#authOverlay{z-index:180;background:radial-gradient(ellipse at 20% 2%,#d8a4cd 0,transparent 45%),radial-gradient(ellipse at 80% 100%,#aabed9 0,transparent 52%),linear-gradient(130deg,#c2b2c8,#d9d6e5 55%,#b9c7d8);backdrop-filter:none;padding:clamp(12px,3vw,40px);align-items:flex-start;overflow-y:auto;overscroll-behavior:contain}
+#authOverlay.on{display:flex}
+#authOverlay .auth-shell{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:min(1450px,100%);max-width:none;min-height:min(850px,calc(100dvh - 80px));max-height:none;margin:auto;overflow:visible;padding:14px;border:1px solid rgba(255,255,255,.85);border-radius:32px;background:rgba(255,255,255,.94);box-shadow:0 38px 85px rgba(48,42,79,.27),0 0 0 8px rgba(255,255,255,.2);color:#18141d;animation:popIn .35s ease}
+.auth-showcase{position:relative;isolation:isolate;min-height:710px;overflow:hidden;border-radius:22px;color:#fff;background:#a68bcb;display:flex;flex-direction:column;justify-content:space-between;padding:clamp(24px,3vw,48px)}
+.auth-art{position:absolute;inset:-3%;z-index:-2;background:linear-gradient(180deg,rgba(61,39,97,.03) 15%,rgba(41,25,89,.08) 55%,rgba(42,27,79,.75) 100%),url('/static/genisi-auth-art.jpg') center 48%/cover no-repeat;animation:authDrift 16s ease-in-out infinite alternate}
+.auth-showcase:after{content:'';position:absolute;inset:0;z-index:-1;background:linear-gradient(115deg,rgba(255,255,255,.14),transparent 48%);pointer-events:none}
+.auth-brand{display:flex;align-items:center;gap:9px;direction:ltr;font-size:22px;font-weight:600;letter-spacing:-.8px;text-shadow:0 2px 20px rgba(35,20,65,.22)}
+.auth-brand-mark{display:grid;place-items:center;width:35px;height:35px;border-radius:12px;background:rgba(255,255,255,.24);border:1px solid rgba(255,255,255,.45);font-size:20px}
+.auth-brand-edition{margin-left:auto;font-size:9px;font-weight:600;letter-spacing:2px;opacity:.85}
+.auth-hero-title{position:absolute;top:18%;left:7%;font-size:clamp(50px,6.5vw,96px);font-weight:600;letter-spacing:-.065em;line-height:.91;color:rgba(255,255,255,.95);text-shadow:0 8px 40px rgba(52,29,98,.12)}
+.auth-hero-title span{font-weight:300;color:rgba(255,255,255,.7)}
+.auth-showcase-bottom{position:relative;margin-top:auto;text-align:right}
+.auth-origin{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:500;letter-spacing:.1px;color:rgba(255,255,255,.88);margin-bottom:14px}
+.auth-origin-dot{width:7px;height:7px;border-radius:50%;background:#a8f4dd;box-shadow:0 0 14px #a8f4dd}.auth-origin-divider{opacity:.45}
+.auth-story{min-height:145px}.auth-story-kicker{font-size:12px;color:#f2d8fb;margin-bottom:5px;font-weight:500}.auth-story h2{font-size:clamp(25px,2.8vw,40px);line-height:1.2;letter-spacing:-1.1px;text-align:right;font-weight:600}.auth-story p{font-size:14px;line-height:1.8;color:rgba(255,255,255,.84);max-width:490px;margin-top:10px}
+.auth-story-controls{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px}.auth-story-dots{display:flex;gap:7px;align-items:center}.auth-story-dots button{width:7px;height:7px;padding:0;border-radius:99px;background:rgba(255,255,255,.42);transition:width .25s,background .25s}.auth-story-dots button.on{width:25px;background:#fff}.auth-story-arrows{display:flex;gap:7px}.auth-story-arrows button{width:36px;height:36px;border:1px solid rgba(255,255,255,.42);border-radius:50%;color:#fff;font-size:17px}.auth-story-arrows button:hover{background:rgba(255,255,255,.18)}
+#authOverlay .auth-content{display:flex;flex-direction:column;min-width:0;border-radius:22px;background:linear-gradient(150deg,#f6eef4,#f5f4f7 64%,#f5f4f7);padding:clamp(24px,3.4vw,52px);color:#17121c}
+.auth-topline,.auth-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;direction:ltr}.auth-mini-brand{font-size:11px;font-weight:700;letter-spacing:2px;color:#39323e}.auth-mini-brand span{display:inline-grid;place-items:center;width:36px;height:36px;margin-right:8px;background:white;border-radius:12px;color:#b756aa;font-size:20px;box-shadow:0 4px 12px rgba(68,45,71,.08)}
+#authLanguage{background:rgba(255,255,255,.7);color:#5d5361;border:1px solid rgba(80,59,81,.1);border-radius:99px;padding:7px 12px;font-size:11px;outline:none;cursor:pointer}
+.auth-content-inner{width:min(100%,490px);margin:auto; padding:32px 0}.auth-welcome-tag{color:#a14c96;font-size:10px;font-weight:700;letter-spacing:1.5px;margin-bottom:16px;direction:ltr;text-align:right}
+#authOverlay .mtabs{display:flex;gap:4px;width:max-content;max-width:100%;padding:4px;margin:0 0 27px;background:#eae4eb;border-radius:99px}
+#authOverlay .mtab{flex:none;padding:9px 17px;border-radius:99px;font-size:12px;color:#716975}
+#authOverlay .mtab.on{background:#fff;color:#25202a;box-shadow:0 2px 9px rgba(67,47,66,.08)}
+#authOverlay #authForm h3{display:block;font-size:clamp(25px,2.6vw,34px);font-weight:600;line-height:1.35;letter-spacing:-.4px;margin-bottom:6px;color:#18141b}
+#authOverlay #authForm .auth-intro{color:#716a74;font-size:12.5px;line-height:1.8;margin-bottom:24px}
+#authOverlay .field{margin-bottom:14px}#authOverlay .field label{font-size:12px;color:#332c35;font-weight:500;margin-bottom:6px}
+#authOverlay .field input{width:100%;min-height:50px;background:rgba(255,255,255,.88);border:1px solid rgba(83,63,83,.07);border-radius:14px;padding:12px 15px;color:#29212a;font-size:14px}
+#authOverlay .field input:focus{border-color:#c652aa;box-shadow:0 0 0 3px rgba(207,78,171,.12)}
+#authOverlay .atlas-captcha{background:rgba(255,255,255,.58);border:1px solid rgba(83,63,83,.09);padding:12px 14px;margin:15px 0 6px;color:#3a313a;border-radius:14px}
+#authOverlay .atlas-captcha>b{font-size:12px}#authOverlay .atlas-captcha .sub{color:#77707a;font-size:11px;margin-bottom:5px}#authOverlay .atlas-captcha #atlasChallengeQuestion{color:#312733;font-size:13px;margin:7px 0}
+#authOverlay .atlas-challenge-choice{background:#fff;color:#4a3f4a;border-color:#e9e2e9;min-height:36px}#authOverlay .atlas-challenge-choice:has(input:checked){border-color:#c652aa;background:#f9e8f5;color:#8e327c}#authOverlay .atlas-challenge-choice input{accent-color:#c652aa}#authOverlay .atlas-challenge-refresh{color:#8e4b82;margin:5px auto 0}
+#authOverlay #atlasPowStatus{margin:3px 0;color:#8d4c82;font-size:12px}
+#authOverlay .mrow{margin-top:16px}#authOverlay #fGo{min-height:50px;background:linear-gradient(100deg,#cb56aa,#dc58aa);border-radius:14px;color:#fff;font-weight:600;box-shadow:0 7px 20px rgba(204,76,163,.2)}#authOverlay #fGo:hover{filter:brightness(1.05)}
+#authOverlay .auth-swap{margin-top:18px;text-align:center;color:#77707a;font-size:12px}#authOverlay .auth-swap button{color:#9e3f8d;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+#authOverlay .auth-footer{border-top:1px solid rgba(83,63,83,.08);padding-top:18px;color:#89818a;font-size:10px}#authOverlay .auth-footer span:last-child{direction:rtl}
+#authOverlay .auth-session-loading{color:#746877;text-align:center;padding:40px;font-size:13px}.auth-loading .mtabs{visibility:hidden}
+@keyframes authDrift{from{transform:scale(1)}to{transform:scale(1.035) translateY(-.5%)}}
+.account-letter,#topAcct.account-letter,#acctBtn.account-letter{background:#df3d4e;color:white;font-size:13px;font-weight:700;border-radius:50%;display:grid;place-items:center}
+/* Refined composer: retain attachment, model and voice actions without an extra tools menu. */
+.composer{border-radius:30px;border-color:var(--border);padding:10px 14px;box-shadow:0 10px 32px rgba(0,0,0,.19)}
+.comp-pill-row{gap:8px}.comp-lead #plusBtn{background:var(--surface2);color:var(--text)}#modelBtn{background:var(--surface2);border:1px solid var(--border);font-size:12.5px}#input::placeholder{opacity:.8}
+@media(min-width:761px) and (max-height:950px){
+  #authOverlay .auth-content{padding:28px 38px}
+  #authOverlay .auth-content-inner{padding:14px 0}
+  #authOverlay .mtabs{margin-bottom:14px}
+  #authOverlay #authForm .auth-intro{margin-bottom:14px}
+  .auth-showcase{min-height:650px}
+}
+@media(max-width:760px){
+  #sidebar{height:100vh;height:100dvh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  #sidebar .sb-scroll{flex:0 0 auto;min-height:0;overflow:visible}
+  #sidebar .sb-bottom{margin-top:auto;flex-shrink:0}
+  #authOverlay{align-items:flex-start;padding:12px;min-height:100dvh}
+  #authOverlay .auth-shell{display:flex;flex-direction:column;min-height:0;gap:9px;padding:8px;border-radius:24px;box-shadow:0 18px 55px rgba(48,42,79,.2);margin:auto 0}
+  .auth-showcase{min-height:340px;padding:23px;border-radius:17px}
+  .auth-hero-title{top:17%;font-size:clamp(45px,12vw,68px)}
+  .auth-story{min-height:100px}.auth-story h2{font-size:25px}.auth-story p{font-size:12px;margin-top:4px}.auth-origin{font-size:10px;margin-bottom:7px}.auth-story-controls{margin-top:8px}.auth-story-arrows button{width:32px;height:32px}
+  #authOverlay .auth-content{padding:24px 20px;border-radius:17px} .auth-content-inner{padding:24px 0}
+  #authOverlay #authForm h3{font-size:26px}.auth-welcome-tag{margin-bottom:10px}
+  #authOverlay .mtabs{margin-bottom:20px}#authOverlay .atlas-challenge-options{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .composer{border-radius:26px}.comp-pill-row{gap:5px}#modelBtn{max-width:136px}
+}
+@media(max-width:380px){#authOverlay .atlas-challenge-options{grid-template-columns:repeat(2,minmax(0,1fr))}.auth-showcase{min-height:310px}.auth-content-inner{padding:20px 0}}
+#authOverlay.auth-loading .auth-shell{visibility:hidden}
+#authOverlay.auth-loading:after{content:'جارٍ التحقق من الجلسة…';position:fixed;inset:0;display:grid;place-items:center;color:#625468;font-size:13px;pointer-events:none}
+.auth-showcase-bottom[dir="ltr"]{text-align:left}.auth-showcase-bottom[dir="ltr"] .auth-story h2{text-align:left}
+.auth-pass-wrap{position:relative}#authOverlay .auth-pass-wrap input{padding-left:70px}#fPassToggle{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:600;color:#9e3f8d;padding:6px;border-radius:8px}#fPassToggle:focus-visible{outline:2px solid #c652aa;outline-offset:2px}
+@media(max-width:760px){.auth-showcase:after{background:linear-gradient(180deg,transparent 18%,rgba(40,25,75,.38) 54%,rgba(35,22,67,.67) 100%)}}
+@media(prefers-reduced-motion:reduce){.auth-art{animation:none}.auth-story-dots button{transition:none}}
+
+
 </style>
 </head>
 <body>
@@ -1963,10 +2036,36 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
   <div class="spList" id="spList"></div>
 </div></div>
 
-<div class="overlay" id="authOverlay"><div class="modal">
-  <div class="mtabs"><button class="mtab on" id="mtLogin"></button><button class="mtab" id="mtReg"></button></div>
-  <div id="authForm"></div>
-</div></div>
+<div class="overlay on auth-loading" id="authOverlay" role="dialog" aria-modal="true" aria-label="مرحباً بك في Genisi">
+  <div class="modal auth-shell">
+    <section class="auth-showcase" aria-label="اكتشف Genisi">
+      <div class="auth-art"></div>
+      <div class="auth-brand"><span class="auth-brand-mark">✦</span><span>genisi</span><span class="auth-brand-edition">BY ANESNT</span></div>
+      <div class="auth-hero-title" aria-hidden="true">IMAGINE<br><span>MORE.</span></div>
+      <div class="auth-showcase-bottom" dir="rtl">
+        <div class="auth-origin"><span class="auth-origin-dot"></span><span id="authOrigin">ذكاء اصطناعي جزائري</span><span class="auth-origin-divider">/</span><span id="authWorld">من الجزائر إلى العالم</span></div>
+        <div class="auth-story" aria-live="off">
+          <div class="auth-story-kicker" id="authStoryKicker">النماذج اللغوية</div>
+          <h2 id="authStoryTitle" dir="ltr">Genisi 4.1 Carbon</h2>
+          <p id="authStoryDescription">أحدث نموذج من AnesNT، لأفكار أكبر ومحادثات أذكى.</p>
+        </div>
+        <div class="auth-story-controls" dir="ltr">
+          <div class="auth-story-dots" id="authStoryDots" aria-label="نماذج Genisi"></div>
+          <div class="auth-story-arrows"><button type="button" id="authStoryPrev" aria-label="السابق">←</button><button type="button" id="authStoryNext" aria-label="التالي">→</button></div>
+        </div>
+      </div>
+    </section>
+    <section class="auth-content" dir="rtl">
+      <div class="auth-topline"><div class="auth-mini-brand"><span>✦</span> GENISI</div><select id="authLanguage" aria-label="اللغة"><option value="ar">العربية</option><option value="en">English</option><option value="fr">Français</option></select></div>
+      <div class="auth-content-inner">
+        <div class="auth-welcome-tag">✦ &nbsp; THE SPACE FOR YOUR IDEAS</div>
+        <div class="mtabs"><button type="button" class="mtab on" id="mtLogin"></button><button type="button" class="mtab" id="mtReg"></button></div>
+        <div id="authForm"><div class="auth-session-loading" role="status">جارٍ التحقق من الجلسة…</div></div>
+      </div>
+      <div class="auth-footer"><span>© AnesNT · Genisi</span><span>صُنع في الجزائر <span aria-hidden="true">✦</span></span></div>
+    </section>
+  </div>
+</div>
 
 <div class="overlay" id="settingsOverlay"><div class="modal">
   <h3 id="setTitle"></h3><div class="sub" id="setSub"></div>
@@ -2471,7 +2570,6 @@ function applyLang(){
   renderPlanCard();
   $('#modelBtn').innerHTML = '<span>' + modelLabel(S.model) + '</span>' + I.chev; updatePh();
   const _mc = $('#modelChipName'); if (_mc) _mc.textContent = modelLabel(S.model);
-  $('#toolsBtn').innerHTML = I.sliders + '<span>' + t.tools + '</span>';
   $('#lbClose').innerHTML = I.x;
   $('#lbDownload').innerHTML = I.download;
   renderAvatar(); renderHomeHero(); renderSessions(); renderFiles(); renderGallery(); renderSync(S.sync); renderPlanBadge(); renderSuggestions();
@@ -2497,18 +2595,20 @@ function renderAvatar(){
     S.user = normalizeUser(S.user);
     const n = S.user.username || S.user.email || '?';
     av.textContent = n[0].toUpperCase();
-    av.style.background = 'linear-gradient(135deg,#08a7ff,#9b72cb)';
+    av.style.background = '#df3d4e';
     $('#sbProfileName').textContent = n;
     $('#sbProfileSub').textContent = S.user.email || t.acctTitle;
-    if (rv){ rv.textContent = n[0].toUpperCase(); rv.style.background = 'linear-gradient(135deg,#08a7ff,#9b72cb)'; }
-    { const _ta = $('#topAcct'); if (_ta) _ta.textContent = n[0].toUpperCase(); }
+    if (rv){ rv.textContent = n[0].toUpperCase(); rv.style.background = '#df3d4e'; rv.style.color = '#fff'; }
+    { const _ta = $('#topAcct'); if (_ta) { _ta.textContent = Array.from(n)[0].toUpperCase(); _ta.classList.add('account-letter'); } }
+    { const _a = $('#acctBtn'); if (_a) { _a.textContent = Array.from(n)[0].toUpperCase(); _a.classList.add('account-letter'); } }
   } else {
     av.innerHTML = I.user;
     av.style.background = 'var(--surface2)';
     $('#sbProfileName').textContent = t.yourSpace;
     $('#sbProfileSub').textContent = t.deviceAccount;
     if (rv){ rv.textContent = 'G'; rv.style.background = 'var(--surface2)'; rv.style.color = 'var(--text2)'; }
-    { const _ta = $('#topAcct'); if (_ta) _ta.textContent = 'G'; }
+    { const _ta = $('#topAcct'); if (_ta) { _ta.textContent = 'G'; _ta.classList.remove('account-letter'); } }
+    { const _a = $('#acctBtn'); if (_a) { _a.innerHTML = I.user; _a.classList.remove('account-letter'); } }
   }
 }
 function renderHomeHero(){
@@ -2556,7 +2656,6 @@ function buildComposer(){
     '<div class="comp-pill-row">' +
       '<div class="comp-lead">' +
         '<button class="cbtn" id="plusBtn" type="button" title="attach">' + I.plus + '</button>' +
-        '<button id="toolsBtn" class="cbtn" type="button"></button>' +
       '</div>' +
       '<div class="crow1"><textarea id="input" rows="1" dir="auto"></textarea></div>' +
       '<div class="crow2">' +
@@ -3948,7 +4047,7 @@ function openAcct(){
   $('#acctName').textContent = S.user ? (S.user.username || '') : '';
   $('#acctMail').textContent = S.user && S.user.email ? S.user.email : '—';
   $('#acctAvatar').textContent = S.user ? (S.user.username || '?')[0].toUpperCase() : '?';
-  $('#acctAvatar').style.background = 'linear-gradient(135deg,#08a7ff,#9b72cb)';
+  $('#acctAvatar').style.background = '#df3d4e';
   renderPlanCard();
   refreshStats();
   $('#acctOverlay').classList.add('on');
@@ -3998,7 +4097,7 @@ $('#brand').onclick = goHome;
 /* ═══════════════════════════ popovers ═══════════════════════════ */
 let popOpen = null;
 function closePops(){ document.querySelectorAll('.pop').forEach(p => p.classList.remove('on')); popOpen = null; }
-document.addEventListener('click', e => { if (popOpen && !e.target.closest('.pop') && !e.target.closest('#modelBtn') && !e.target.closest('#voiceModelBtn') && !e.target.closest('#toolsBtn') && !e.target.closest('#kebabBtn') && !e.target.closest('#avatarBtn') && !e.target.closest('#acctBtn') && !e.target.closest('#planBtn')) closePops(); });
+document.addEventListener('click', e => { if (popOpen && !e.target.closest('.pop') && !e.target.closest('#modelBtn') && !e.target.closest('#voiceModelBtn') && !e.target.closest('#kebabBtn') && !e.target.closest('#avatarBtn') && !e.target.closest('#acctBtn') && !e.target.closest('#planBtn')) closePops(); });
 function openPop(sel, anchor, items){
   const pop = $(sel);
   const was = pop.classList.contains('on');
@@ -4038,18 +4137,6 @@ function openModelMenu(anchor){
     fn: () => { S.model = m; localStorage.setItem('g3_model', m); applyLang(); }
   })));
 }
-/* tools menu */
-$('#toolsBtn').onclick = e => {
-  const t = T();
-  openPop('#toolsPop', e.currentTarget, [
-    {ic: I.image, label: t.tImage, fn: () => ins(t.pImage)},
-    {ic: I.video, label: t.tVideo, fn: () => ins(t.pVideo)},
-    {ic: I.globe, label: t.tSearch, fn: () => ins(t.pSearch)},
-    {ic: I.sigma, label: t.tLatex, fn: () => ins(t.pLatex)},
-    {ic: I.mermaid, label: t.tChart, fn: () => ins(t.pChart)},
-    {ic: I.doc, label: t.tDoc, fn: () => ins(t.pDoc)}
-  ]);
-};
 function ins(txt){ $('#input').value = txt; syncWritingDirection(txt); autoGrow(); $('#input').focus(); }
 /* kebab */
 $('#kebabBtn').onclick = e => {
@@ -4996,7 +5083,7 @@ function finalizeTurn(){
 /* keyboard */
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape'){
-    document.querySelectorAll('.overlay.on').forEach(o => o.classList.remove('on'));
+    document.querySelectorAll('.overlay.on:not(#authOverlay)').forEach(o => o.classList.remove('on'));
     drawerOpen(false); closePops();
     if (isMobile() && !document.documentElement.classList.contains('side-collapsed')) setSidebar(false);
     $('#lightbox').classList.remove('on');
@@ -5028,7 +5115,7 @@ document.addEventListener('keydown', e => {
 
   applyLang();
   setTab('chats');
-  input.focus();
+  if (!$('#authOverlay').classList.contains('on')) input.focus();
 })();
 </script>
 
@@ -5693,27 +5780,6 @@ openModelMenu = function(anchor){
 const _ra = renderAvatar;
 renderAvatar = function(){ _ra(); const s = $('#sbProfileSub'); if (s && !S.user) s.textContent = 'Genisi 4 Atlas'; };
 { const r = $('#modelSeg') && $('#modelSeg').closest('.setRow'); if (r) r.style.display = 'none'; }
-
-/* ===== tools menu ===== */
-$('#toolsBtn').onclick = e => {
-  const t = T(), ar = S.lang === 'ar';
-  openPop('#toolsPop', e.currentTarget, [
-    {ic: I.live, label: t.tVoiceCall, fn: () => { if (openVoiceCallHook) openVoiceCallHook(); }},
-    {ic: I.image, label: t.tImage, fn: () => ins(t.pImage)},
-    {ic: I.video, label: t.tVideo, fn: () => ins(t.pVideo)},
-    {ic: I.music, label: t.tMusic, fn: () => ins(t.pMusic)},
-    {ic: I.globe, label: t.tSearch, fn: () => ins(t.pSearch)},
-    {ic: I.sigma, label: t.tLatex, fn: () => ins(t.pLatex)},
-    {ic: I.mermaid, label: t.tChart, fn: () => ins(t.pChart)},
-    {ic: I.doc, label: t.tDoc, fn: () => ins(t.pDoc)},
-    {ic: I.file, label: t.tFile, fn: () => ins(t.pFile)},
-    {ic: I.sliders, label: state.deep ? t.deepOff : t.deepOn, fn: () => { state.deep = !state.deep; saveState(); toast(state.deep ? t.deepOnMsg : t.deepOffMsg); }},
-    {sep: 1},
-    {ic: I.plus, label: t.attach, fn: () => $('#fileIn').click()},
-    {ic: I.sliders, label: state.toolsOn ? t.agentOff : t.agentOn,
-      fn: () => { state.toolsOn = !state.toolsOn; saveState(); toast(state.toolsOn ? t.agentOnMsg : t.agentOffMsg); syncQSet(); }}
-  ]);
-};
 
 /* ===== Atlas settings block inside the existing settings modal ===== */
 const blk = document.createElement('div'); blk.id = 'atlasSet';
@@ -7890,13 +7956,62 @@ ACC.id = null; ACC.rec = null;
 
 const ATLAS_PREF_DEFAULTS = {memory_enabled:false,memory_summary:'',warmth:55,enthusiasm:50,emoji_mode:'auto',visual_answers:true,headers_lists:true,reference_photo:'',full_body_reference_photo:''};
 S.prefs = Object.assign({}, ATLAS_PREF_DEFAULTS);
-let atlasAuthBusy = false, atlasChallenge = null, atlasSaveTimer = null, atlasPrefsTimer = null;
+let atlasAuthBusy = false, atlasChallenge = null, atlasChallengeSeq = 0, atlasSaveTimer = null, atlasPrefsTimer = null;
 const atlasText = {
   ar:{memoryEnabled:'تفعيل الذاكرة',login:'تسجيل الدخول',register:'إنشاء حساب',email:'البريد الإلكتروني',username:'اسم المستخدم',password:'كلمة المرور',confirm:'تأكيد كلمة المرور',goLogin:'دخول آمن',goRegister:'إنشاء الحساب',swapLogin:'لديك حساب؟ تسجيل الدخول',swapRegister:'ليس لديك حساب؟ أنشئ حساباً',captchaTitle:'اختبار Genisi للتحقق',captchaNote:'حل المسألة ثم أكمل فحص الحماية التشفيري تلقائياً.',refresh:'اختبار جديد',loading:'يتم إنشاء الاختبار…',pow:'جارٍ تنفيذ فحص الحماية…',memory:'ذاكرة Genisi',memoryDesc:'استخدم الملخص لتخصيص المحادثات بين جلساتك.',summary:'ملخص الذاكرة',summaryHint:'اكتب المعلومات والتفضيلات التي تريد من Genisi تذكّرها.',warmth:'الدفء',enthusiasm:'الحماس',emoji:'استخدام الرموز التعبيرية',emojiAuto:'تلقائي',emojiLow:'قليل',emojiHigh:'كثير',emojiOff:'بدون',visual:'إجابات مرئية',visualDesc:'استخدم الجداول والمخططات والتنسيق عندما يفيد ذلك.',headers:'العناوين والقوائم',headersDesc:'قسّم الإجابات الطويلة إلى عناوين وقوائم واضحة.',reference:'الصورة المرجعية',fullbody:'الصورة المرجعية للجسم الكامل',photoLocal:'تُحفظ الصورتان على هذا الجهاز فقط ولا تُرفعان إلى الداتا سيت.',choose:'اختيار صورة',remove:'إزالة',saved:'تم حفظ التخصيص',prefsErr:'تعذر حفظ إعدادات التخصيص',photoErr:'تعذر تجهيز الصورة. جرّب صورة أصغر.',security:'بيانات الحساب محفوظة في الداتا سيت الخاصة. لا تشارك كلمة مرورك.',minPass:'كلمة المرور يجب أن تتكون من 12 حرفاً على الأقل.'},
   en:{memoryEnabled:'Enable memory',login:'Sign in',register:'Create account',email:'Email address',username:'Username',password:'Password',confirm:'Confirm password',goLogin:'Secure sign in',goRegister:'Create account',swapLogin:'Already have an account? Sign in',swapRegister:'New to Genisi? Create an account',captchaTitle:'Genisi verification test',captchaNote:'Solve the puzzle, then the cryptographic anti-bot check runs automatically.',refresh:'New test',loading:'Preparing test…',pow:'Running security check…',memory:'Genisi memory',memoryDesc:'Use this summary to personalize chats across sessions.',summary:'Memory summary',summaryHint:'Add the details and preferences you want Genisi to remember.',warmth:'Warmth',enthusiasm:'Enthusiasm',emoji:'Emoji use',emojiAuto:'Automatic',emojiLow:'Low',emojiHigh:'High',emojiOff:'Off',visual:'Visual answers',visualDesc:'Use tables, diagrams and formatting when helpful.',headers:'Headers and lists',headersDesc:'Organize longer answers with clear headings and lists.',reference:'Reference photo',fullbody:'Full-body reference photo',photoLocal:'Both photos stay on this device and are not uploaded to the dataset.',choose:'Choose photo',remove:'Remove',saved:'Personalization saved',prefsErr:'Could not save personalization settings',photoErr:'Could not process this image. Try a smaller photo.',security:'Account data is stored in your private dataset. Never share your password.',minPass:'Use a password with at least 12 characters.'},
   fr:{memoryEnabled:'Activer la mémoire',login:'Connexion',register:'Créer un compte',email:'Adresse e-mail',username:'Nom d’utilisateur',password:'Mot de passe',confirm:'Confirmer le mot de passe',goLogin:'Connexion sécurisée',goRegister:'Créer le compte',swapLogin:'Déjà un compte ? Se connecter',swapRegister:'Nouveau sur Genisi ? Créer un compte',captchaTitle:'Vérification Genisi',captchaNote:'Résolvez le calcul ; le contrôle cryptographique anti-robot s’exécute ensuite.',refresh:'Nouveau test',loading:'Préparation du test…',pow:'Vérification de sécurité…',memory:'Mémoire Genisi',memoryDesc:'Utilisez ce résumé pour personnaliser les conversations.',summary:'Résumé de mémoire',summaryHint:'Ajoutez les informations et préférences à retenir.',warmth:'Chaleur',enthusiasm:'Enthousiasme',emoji:'Émojis',emojiAuto:'Automatique',emojiLow:'Peu',emojiHigh:'Beaucoup',emojiOff:'Désactivés',visual:'Réponses visuelles',visualDesc:'Utiliser tableaux, diagrammes et mise en forme si utile.',headers:'Titres et listes',headersDesc:'Structurer les réponses longues avec des titres et listes.',reference:'Photo de référence',fullbody:'Photo de référence en pied',photoLocal:'Les photos restent sur cet appareil et ne sont pas envoyées au dataset.',choose:'Choisir une photo',remove:'Supprimer',saved:'Préférences enregistrées',prefsErr:'Impossible d’enregistrer les préférences',photoErr:'Impossible de traiter cette image. Essayez une photo plus petite.',security:'Les données sont stockées dans votre dataset privé. Ne partagez jamais votre mot de passe.',minPass:'Utilisez un mot de passe de 12 caractères minimum.'}
 };
 const AT = () => atlasText[S.lang==='fr'?'fr':S.lang==='en'?'en':'ar'];
+
+// A lightweight, accessible, video-like tour; no video or external media is fetched.
+const AUTH_STORIES = [
+  {title:'Genisi 4.1 Carbon', category:{ar:'النماذج اللغوية',en:'LANGUAGE MODELS',fr:'MODÈLES DE LANGAGE'}, description:{ar:'أحدث نموذج من AnesNT، لأفكار أكبر ومحادثات أذكى.',en:'The latest model from AnesNT, for bigger ideas and smarter conversations.',fr:'Le dernier modèle AnesNT, pour des idées plus grandes et des conversations plus intelligentes.'}},
+  {title:'Genisi 4 Atlas', category:{ar:'النماذج اللغوية',en:'LANGUAGE MODELS',fr:'MODÈLES DE LANGAGE'}, description:{ar:'مساحتك للمحادثة والبرمجة والتحليل، من الفكرة إلى الإنجاز.',en:'Your space for conversation, coding and analysis, from idea to execution.',fr:'Votre espace de conversation, de code et d’analyse, de l’idée à la réalisation.'}},
+  {title:'Genisi 1 Speak', category:{ar:'التحدث',en:'VOICE',fr:'VOIX'}, description:{ar:'تحدث بشكل طبيعي، ودع أفكارك تأخذ صوتاً.',en:'Speak naturally and give your ideas a voice.',fr:'Parlez naturellement et donnez une voix à vos idées.'}},
+  {title:'Genisi 2 Sona', category:{ar:'الفيديوهات',en:'VIDEO',fr:'VIDÉO'}, description:{ar:'من فكرة بسيطة إلى مشاهد تتحرك أمامك.',en:'Turn a simple idea into moving scenes.',fr:'Transformez une idée en scènes animées.'}},
+  {title:'Genisi 2 Art', category:{ar:'الصور',en:'IMAGES',fr:'IMAGES'}, description:{ar:'تخيّل ما تريد، واستكشفه بصورة جديدة.',en:'Imagine what you want and explore it in a new light.',fr:'Imaginez ce que vous voulez et explorez-le sous un nouveau jour.'}},
+  {title:'Genisi 1 Music', category:{ar:'الموسيقى',en:'MUSIC',fr:'MUSIQUE'}, description:{ar:'امنح أفكارك إيقاعاً، واكتشف إمكانات الصوت.',en:'Give your ideas rhythm and explore the possibilities of sound.',fr:'Donnez du rythme à vos idées et explorez les possibilités du son.'}}
+];
+// Hide the app from keyboard and assistive technology while the entry gate is open.
+const authInertState=new Map();
+function setEntryGate(open){
+  const ids=['rail','sidebar','topbar','viewHome','viewChat','viewVoice','drawer','scrim','searchOverlay','settingsOverlay','acctOverlay'];
+  for(const id of ids){const el=document.getElementById(id);if(!el)continue;
+    if(open){if(!authInertState.has(el))authInertState.set(el,el.inert);el.inert=true;}
+    else if(authInertState.has(el)){el.inert=authInertState.get(el);authInertState.delete(el);}
+  }
+}
+setEntryGate(true);
+let authStoryIndex=0;
+function renderAuthStory(){
+  const lang=['ar','en','fr'].includes(S.lang)?S.lang:'ar', story=AUTH_STORIES[authStoryIndex];
+  $('#authOrigin').textContent=lang==='ar'?'ذكاء اصطناعي جزائري':lang==='fr'?'IA algérienne':'Algerian AI';
+  $('#authWorld').textContent=lang==='ar'?'من الجزائر إلى العالم':lang==='fr'?'De l’Algérie au monde':'From Algeria to the world';
+  $('#authOverlay .auth-showcase-bottom').dir=lang==='ar'?'rtl':'ltr';
+  $('#authStoryKicker').textContent=story.category[lang];
+  $('#authStoryTitle').textContent=story.title;
+  $('#authStoryDescription').textContent=story.description[lang];
+  const container=$('#authStoryDots');container.innerHTML='';
+  AUTH_STORIES.forEach((item,i)=>{const button=document.createElement('button');button.type='button';button.className=i===authStoryIndex?'on':'';button.setAttribute('aria-label',item.title);button.setAttribute('aria-current',i===authStoryIndex?'true':'false');button.onclick=()=>{authStoryIndex=i;renderAuthStory();};container.appendChild(button);});
+  const content=$('#authOverlay .auth-content');content.dir=lang==='ar'?'rtl':'ltr';
+  $('#authLanguage').value=lang;
+}
+$('#authStoryPrev').onclick=()=>{authStoryIndex=(authStoryIndex+AUTH_STORIES.length-1)%AUTH_STORIES.length;renderAuthStory();};
+$('#authStoryNext').onclick=()=>{authStoryIndex=(authStoryIndex+1)%AUTH_STORIES.length;renderAuthStory();};
+$('#authLanguage').onchange=e=>{S.lang=e.target.value;localStorage.setItem('g3_lang',S.lang);applyLang();renderAuthStory();if(!$('#authOverlay').classList.contains('auth-loading')&&!atlasAuthBusy)renderAuthForm();};
+renderAuthStory();
+if(!window.matchMedia || !window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+  setInterval(()=>{const overlay=$('#authOverlay');if(overlay.classList.contains('on')&&!document.hidden&&!$('.auth-story-controls').matches(':focus-within')){authStoryIndex=(authStoryIndex+1)%AUTH_STORIES.length;renderAuthStory();}},5000);
+}
+// Keep keyboard focus inside the mandatory entry screen, including on small screens.
+document.addEventListener('keydown',e=>{
+  const gate=$('#authOverlay');if(!gate.classList.contains('on')||e.key!=='Tab')return;
+  const items=Array.from(gate.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled])')).filter(el=>el.offsetParent!==null);
+  if(!items.length)return;const first=items[0],last=items[items.length-1];
+  if(e.shiftKey&&(document.activeElement===first||!gate.contains(document.activeElement))){e.preventDefault();last.focus();}
+  else if(!e.shiftKey&&(document.activeElement===last||!gate.contains(document.activeElement))){e.preventDefault();first.focus();}
+});
 
 function atlasCookie(name){
   const prefix=String(name)+'=';
@@ -7919,7 +8034,7 @@ api = async function(path,opts={}){
     if(csrf) headers['X-CSRF-Token']=csrf;
   }
   const response=await fetch(path,Object.assign({},opts,{method,headers,credentials:'include',cache:opts.cache||'no-store'}));
-  if(response.status===401){setAuth(null,null);throw new Error('auth');}
+  if(response.status===401){const wasSignedIn=!!S.user;setAuth(null,null);if(wasSignedIn)openAuth('login');throw new Error('auth');}
   return response;
 };
 apiJ = async function(path,opts){const r=await api(path,opts);if(!r.ok){let j={};try{j=await r.json();}catch(e){}throw new Error(j.detail||('http '+r.status));}return r.json();};
@@ -7928,36 +8043,38 @@ function renderAuthForm(){
   const t=AT(),reg=authMode==='reg';
   $('#mtLogin').classList.toggle('on',!reg);$('#mtReg').classList.toggle('on',reg);
   $('#authForm').innerHTML=
-    '<h3>'+I.user+'<span>'+ (reg?t.register:t.login) +'</span></h3>'+ 
-    '<div class="sub">'+esc(t.security)+'</div>'+ 
+    '<h3>'+ (S.lang==='en'?(reg?'Create your account':'Welcome back'):S.lang==='fr'?(reg?'Créer votre compte':'Bon retour'):reg?'ابدأ رحلتك مع Genisi':'مرحباً بعودتك') +'</h3>'+
+    '<div class="auth-intro">'+(S.lang==='en'?'Your ideas have a place here. Sign in to continue.':S.lang==='fr'?'Vos idées ont leur place ici. Connectez-vous pour continuer.':'مساحة واحدة لأفكارك. سجّل الدخول أو أنشئ حسابك للمتابعة.')+'</div>'+
     (reg?'<div class="field"><label for="fUser">'+t.username+'</label><input id="fUser" maxlength="32" autocomplete="username" required></div>':'')+
-    '<div class="field"><label for="fMail">'+t.email+'</label><input id="fMail" type="email" maxlength="254" autocomplete="email" dir="ltr" required></div>'+
-    '<div class="field"><label for="fPass">'+t.password+'</label><input id="fPass" type="password" maxlength="128" autocomplete="'+(reg?'new-password':'current-password')+'" dir="ltr" required></div>'+
+    '<div class="field"><label for="fMail">'+t.email+'</label><input id="fMail" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com" dir="ltr" required></div>'+
+    '<div class="field"><label for="fPass">'+t.password+'</label><div class="auth-pass-wrap"><input id="fPass" type="password" maxlength="128" autocomplete="'+(reg?'new-password':'current-password')+'" placeholder="••••••••••••" dir="ltr" required><button id="fPassToggle" type="button" aria-label="'+(S.lang==='ar'?'إظهار كلمة المرور':S.lang==='fr'?'Afficher le mot de passe':'Show password')+'">'+(S.lang==='ar'?'إظهار':S.lang==='fr'?'Voir':'Show')+'</button></div></div>'+
     (reg?'<div class="field"><label for="fPass2">'+t.confirm+'</label><input id="fPass2" type="password" maxlength="128" autocomplete="new-password" dir="ltr" required></div>':'')+
     '<div class="atlas-captcha"><b>'+t.captchaTitle+'</b><div class="sub">'+t.captchaNote+'</div><div id="atlasChallengeQuestion" aria-live="polite">'+t.loading+'</div><div id="atlasChallengeOptions" class="atlas-challenge-options"></div><button class="atlas-challenge-refresh" id="atlasChallengeRefresh" type="button">↻ '+t.refresh+'</button></div>'+
     '<div class="sub" id="atlasPowStatus" aria-live="polite"></div>'+
     '<div class="mrow"><button class="btn pri" id="fGo" type="button">'+(reg?t.goRegister:t.goLogin)+'</button></div>'+
-    '<div style="text-align:center;margin-top:12px"><button id="fSwap" type="button" style="color:var(--text2);font-size:13px;text-decoration:underline">'+(reg?t.swapLogin:t.swapRegister)+'</button></div>';
+    '<div class="auth-swap"><button id="fSwap" type="button">'+(reg?t.swapLogin:t.swapRegister)+'</button></div>';
   $('#fSwap').onclick=()=>{authMode=reg?'login':'reg';renderAuthForm();};
+  $('#fPassToggle').onclick=()=>{const pass=$('#fPass'),show=pass.type==='password';pass.type=show?'text':'password';const label=S.lang==='ar'?(show?'إخفاء':'إظهار'):S.lang==='fr'?(show?'Masquer':'Voir'):(show?'Hide':'Show');$('#fPassToggle').textContent=label;$('#fPassToggle').setAttribute('aria-label',label+' '+t.password);};
   $('#atlasChallengeRefresh').onclick=loadAtlasChallenge;
   $('#fGo').onclick=doAuth;
   $('#authForm').querySelectorAll('input').forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doAuth();}}));
   loadAtlasChallenge();
-  const first=$('#authForm').querySelector('input');if(first)first.focus();
+  const first=$('#authForm').querySelector('input');if(first&&!isMobile())first.focus();
 }
-openAuth = function(mode){authMode=mode==='reg'?'reg':'login';$('#authOverlay').classList.add('on');renderAuthForm();};
+openAuth = function(mode){authMode=mode==='reg'?'reg':'login';setEntryGate(true);$('#authOverlay').classList.remove('auth-loading');$('#authOverlay').classList.add('on');renderAuthStory();renderAuthForm();};
 $('#mtLogin').onclick=()=>openAuth('login');$('#mtReg').onclick=()=>openAuth('reg');
 async function loadAtlasChallenge(){
+  const seq=++atlasChallengeSeq;
   atlasChallenge=null;
   const q=$('#atlasChallengeQuestion'),box=$('#atlasChallengeOptions'),go=$('#fGo');
   if(q)q.textContent=AT().loading;if(box)box.innerHTML='';if(go)go.disabled=true;
   try{
     const r=await fetch('/api/auth/challenge',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({mode:authMode==='reg'?'register':'login'})});
-    const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.detail||'challenge');
+    const j=await r.json().catch(()=>({}));if(seq!==atlasChallengeSeq)return;if(!r.ok)throw new Error(j.detail||'challenge');
     atlasChallenge=j;if(q)q.textContent=j.question||AT().loading;
     if(box){box.innerHTML='';(j.options||[]).forEach(value=>{const label=document.createElement('label');label.className='atlas-challenge-choice';const radio=document.createElement('input');radio.type='radio';radio.name='atlasCaptcha';radio.value=String(value);const span=document.createElement('span');span.textContent=String(value);label.append(radio,span);box.appendChild(label);});}
     if(go)go.disabled=false;
-  }catch(e){if(q)q.textContent='تعذر تحميل الاختبار. اضغط «اختبار جديد».';if(go)go.disabled=true;}
+  }catch(e){if(seq!==atlasChallengeSeq)return;if(q)q.textContent='تعذر تحميل الاختبار. اضغط «اختبار جديد».';if(go)go.disabled=true;}
 }
 async function solveAtlasProof(prefix,bits){
   if(!window.crypto||!window.crypto.subtle)throw new Error('WebCrypto غير متاح. افتح الموقع عبر HTTPS.');
@@ -7996,7 +8113,7 @@ doAuth = async function(){
     }
     const verified=await verify.json().catch(()=>({}));
     setAuth('cookie-session',verified.user||j.user);
-    $('#authOverlay').classList.remove('on');
+    $('#authOverlay').classList.remove('on');setEntryGate(false);
     if(reg){
       const guest=lsGet('g3_guest_sessions',lsGet('g3_sessions',[]));
       if(Array.isArray(guest)&&guest.length){try{await api('/api/history/save',{method:'POST',body:JSON.stringify({sessions:guest})});localStorage.removeItem('g3_guest_sessions');localStorage.removeItem('g3_sessions');}catch(e){}}
@@ -8012,7 +8129,7 @@ logoutBackend = async function(){try{await api('/api/auth/logout',{method:'POST'
 doLogout = async function(){
   await logoutBackend();clearTimeout(atlasSaveTimer);setAuth(null,null);S.sessions=[];S.msgs=[];S.cur=-1;S.files=[];S.agent={plan:[],notes:[],sessions:0,updated:null};
   await loadPreferences();
-  $('#acctOverlay').classList.remove('on');closePops();goHome();renderSessions();renderFiles();renderGallery();renderSync('local');toast(T().done||'تم تسجيل الخروج');
+  $('#acctOverlay').classList.remove('on');closePops();goHome();renderSessions();renderFiles();renderGallery();renderSync('local');openAuth('login');toast(T().done||'تم تسجيل الخروج');
 };
 profileMenu = function(anchor){
   if(!S.user){openAuth('login');return;}
@@ -9376,9 +9493,9 @@ setAuth(null,null);applyLang();renderSync('local');
 (async function bootSecureAccount(){
   try{
     const r=await fetch('/api/auth/me',{credentials:'include',cache:'no-store'});
-    if(r.ok){const j=await r.json();setAuth('cookie-session',j.user);await Promise.all([loadPreferences(),loadHistory(),loadWorkspace(),loadAgent()]);syncPendingSessionMedia();}
-    else{setAuth(null,null);await loadPreferences();await loadHistory();}
-  }catch(e){setAuth(null,null);await loadPreferences();await loadHistory();renderSync('error');}
+    if(r.ok){const j=await r.json();if(!j.user)throw new Error('session');setAuth('cookie-session',j.user);$('#authOverlay').classList.remove('on','auth-loading');setEntryGate(false);await Promise.all([loadPreferences(),loadHistory(),loadWorkspace(),loadAgent()]);syncPendingSessionMedia();}
+    else{setAuth(null,null);openAuth('login');await loadPreferences();await loadHistory();}
+  }catch(e){if(!S.user){setAuth(null,null);openAuth('login');}renderSync('error');}
   renderAvatar();renderHomeHero();renderSessions();renderGallery();renderPlanBadge();
 })();
 setTimeout(() => detect(false), 400);
