@@ -10,7 +10,9 @@ pinned: false
 
 # Genisi 4 Atlas — Portable Secure Release 58.65.6 — Windows 12 Embedded System Prompt
 
-Portable Docker/FastAPI application. Hugging Face Spaces is optional as a host. The application uses Hugging Face Hub Dataset `AnesKAM/Genisi-users` for persistent encrypted user data, and uses the public `Qwen/Qwen3.5-Omni-Offline-Demo` Space for language inference.
+Portable Docker/FastAPI application. Hugging Face Spaces is optional as a host. The application uses Hugging Face Hub Dataset `AnesKAM/Genisi-users` for persistent encrypted user data, uses the public `Qwen/Qwen3.5-Omni-Offline-Demo` Space for Atlas, and optionally uses an experimental Z.AI chat web session for Carbon.
+
+Carbon uses the unofficial, experimental `chat.z.ai` web protocol, not the developer API. Set `ZAI_SESSION_TOKEN` to a fresh chat-session JWT in server-side hosting secrets (never commit it, send it in chat, or expose it to the browser). `ZAI_WEB_VERSION` optionally overrides the default web client version `prod-fe-1.1.123`. The model is the web identifier `x-preview-l` (reported by an unofficial bridge to correspond to GLM-5.3-Flash); its availability is not guaranteed. Requests enable thinking and stream reasoning and answers. One image is uploaded to Z.AI, and supported documents are extracted to text locally; audio/video are not supported. All Carbon users share the configured Z.AI account and its quota. The web endpoint may change, require CAPTCHA or reject requests; complete any verification on Z.AI itself, and errors are reported rather than bypassed. No unlimited use is promised. This integration has only mock tests, not a live session test. The web protocol sends the session token in the upstream URL; keep proxy/access logs and HTTP debug logging disabled or redacted. Revoke an exposed session and replace it in hosting secrets.
 
 See [README-AR.md](README-AR.md) for deployment on Render, Railway, VPS, or any Docker host.
 

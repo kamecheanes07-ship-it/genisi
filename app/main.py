@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingRes
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import zai_session
 from .agent import Agent
 from .windows12_prompt import WINDOWS12_SYSTEM_PROMPT, WINDOWS12_PROMPT_VERSION, windows12_prompt_metadata
 from .genisi_auth import (
@@ -1459,8 +1460,8 @@ async def _qwen_sse_events(upstream: Any, *, keepalive_interval: float = 15.0, i
                         event = line[6:].strip()
                     elif line.startswith("data:"):
                         data_lines.append(line[5:].lstrip())
-                if event:
-                    yield event, "\n".join(data_lines), block
+                if event or data_lines:
+                    yield event or "message", "\n".join(data_lines), block
             if eof:
                 return
     finally:
@@ -1577,6 +1578,179 @@ async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...))
         raise
     except Exception as exc:
         raise HTTPException(502, f"تعذر إتمام الطلب عبر مساحة Qwen: {str(exc)[:220]}") from exc
+
+
+# Carbon uses an experimental web-session protocol, never a developer API key.
+async def _carbon_request_body(request: Request) -> dict[str, Any]:
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > 14 * 1024 * 1024:
+            raise HTTPException(413, "الطلب كبير جداً")
+    try:
+        payload = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise HTTPException(400, "طلب JSON غير صالح")
+    if not isinstance(payload, dict):
+        raise HTTPException(422, "طلب غير صالح")
+    return payload
+
+
+def _carbon_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    system = payload.get("system", "")
+    text = payload.get("text", "")
+    history = payload.get("history", [])
+    if not isinstance(system, str) or len(system) > 150000 or not isinstance(text, str) or len(text) > 350000:
+        raise HTTPException(422, "النص طويل جداً أو غير صالح")
+    if not isinstance(history, list) or len(history) > 24:
+        raise HTTPException(422, "سجل المحادثة غير صالح")
+    messages: list[dict[str, Any]] = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    for item in history:
+        if not isinstance(item, dict) or item.get("role") not in {"user", "assistant"} or not isinstance(item.get("content"), str) or len(item["content"]) > 300000:
+            raise HTTPException(422, "سجل المحادثة غير صالح")
+        if item["content"].strip():
+            messages.append({"role": item["role"], "content": item["content"]})
+    if sum(len(m["content"]) for m in messages if isinstance(m["content"], str)) > 1_000_000:
+        raise HTTPException(422, "سجل المحادثة طويل جداً")
+    image = payload.get("image")
+    if image is not None:
+        if not isinstance(image, str) or len(image) > 13 * 1024 * 1024:
+            raise HTTPException(413, "الصورة كبيرة جداً")
+        match = re.fullmatch(r"data:(image/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+/=]+)", image, flags=re.I)
+        if not match:
+            raise HTTPException(422, "صيغة الصورة غير مدعومة")
+        try:
+            raw = base64.b64decode(match.group(2), validate=True)
+        except (ValueError, base64.binascii.Error):
+            raise HTTPException(422, "بيانات الصورة غير صالحة")
+        if len(raw) > 9 * 1024 * 1024 or _sniff_image_mime(raw) != match.group(1).lower():
+            raise HTTPException(422, "الصورة غير صالحة أو تتجاوز 9MB")
+        content: Any = [{"type": "image_url", "image_url": {"url": image}}]
+        content.append({"type": "text", "text": text if text.strip() else "ما محتوى هذه الصورة؟"})
+    else:
+        content = text
+    if not text.strip() and image is None:
+        # Tool follow-ups may have the tool result in the final history user turn.
+        if not messages or messages[-1]["role"] != "user":
+            raise HTTPException(422, "اكتب رسالة أو أرفق صورة")
+    else:
+        messages.append({"role": "user", "content": content})
+    return messages
+
+
+@app.post("/api/models/carbon/stream")
+async def carbon_model_stream(request: Request) -> StreamingResponse:
+    await require_genisi_csrf(request)
+    user = current_user(request)
+    _rate_limit("carbon:" + _sha(str(user["id"])), 30, 300)
+    token = os.getenv("ZAI_SESSION_TOKEN", "").strip()
+    if not token or len(token) > 8192 or any(c.isspace() for c in token):
+        raise HTTPException(503, "Carbon غير مهيأ: اضبط ZAI_SESSION_TOKEN في أسرار الخادم")
+    try:
+        uid = zai_session.user_id(token)
+    except ValueError:
+        raise HTTPException(503, "توكن جلسة Z.AI غير صالح") from None
+    messages = _carbon_messages(await _carbon_request_body(request))
+    # The web endpoint may ignore system-role messages; retain them explicitly.
+    if messages and messages[0]["role"] == "system":
+        system = messages.pop(0)["content"]
+        messages[:0] = [{"role": "user", "content": "[System Instructions]\n" + system},
+                        {"role": "assistant", "content": "Understood. I will follow these instructions."}]
+    prompt_content = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+    prompt = next((part["text"] for part in prompt_content if part.get("type") == "text"), "") if isinstance(prompt_content, list) else prompt_content
+    params, signature = zai_session.request_parameters(token, uid, prompt)
+    version = os.getenv("ZAI_WEB_VERSION", "prod-fe-1.1.123").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,100}", version):
+        raise HTTPException(503, "إعداد إصدار واجهة Z.AI غير صالح")
+    headers = {"Authorization": f"Bearer {token}", "Origin": zai_session.BASE,
+               "Referer": zai_session.BASE + "/", "x-fe-version": version,
+               "x-region": "overseas", "x-signature": signature,
+               "Accept": "text/event-stream"}
+    body = {"id": str(uuid.uuid4()), "chat_id": str(uuid.uuid4()), "model": zai_session.MODEL,
+            "messages": messages, "signature_prompt": prompt, "stream": True,
+            "features": {"enable_thinking": True, "image_generation": False,
+                         "web_search": False, "auto_web_search": False, "preview_mode": True, "flags": []}}
+
+    async def events():
+        yield b": connected\n\n"
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(180.0, connect=15.0), follow_redirects=False) as client:
+                if isinstance(prompt_content, list):
+                    image = prompt_content[0]["image_url"]["url"]
+                    mime, encoded = image[5:].split(";base64,", 1)
+                    raw_image = base64.b64decode(encoded)
+                    upload = await client.post(zai_session.BASE + "/api/v1/files/", headers={"Authorization": f"Bearer {token}", "Origin": zai_session.BASE, "Referer": zai_session.BASE + "/"}, files={"file": ("image." + {"image/jpeg": "jpg", "image/png": "png", "image/gif": "gif", "image/webp": "webp"}[mime.lower()], raw_image, mime)})
+                    if not 200 <= upload.status_code < 300:
+                        yield sse_event({"type": "error", "message": f"تعذر رفع الصورة إلى Z.AI (HTTP {upload.status_code})."})
+                        return
+                    file_obj = upload.json()
+                    if not isinstance(file_obj, dict) or not isinstance(file_obj.get("id"), str) or not file_obj["id"]:
+                        yield sse_event({"type": "error", "message": "استجابة رفع الصورة من Z.AI غير صالحة."})
+                        return
+                    file_id = file_obj["id"]
+                    prompt_content[0]["image_url"]["url"] = file_id
+                    body["files"] = [{"type": "image", "file": file_obj, "id": file_id,
+                        "url": "/api/v1/files/" + file_id, "name": file_obj.get("filename", "image"),
+                        "status": "uploaded", "size": len(raw_image), "error": "", "itemId": str(uuid.uuid4()),
+                        "media": "image", "uploadedAt": int(time.time() * 1000), "ref_user_msg_id": body["id"]}]
+                    body["current_user_message_id"] = body["id"]
+                async with client.stream("POST", zai_session.BASE + "/api/v2/chat/completions", params=params,
+                                         headers=headers, json=body) as upstream:
+                    if not 200 <= upstream.status_code < 300:
+                        yield sse_event({"type": "error", "message": f"رفضت Z.AI طلب الجلسة (HTTP {upstream.status_code}). تحقق من الجلسة وحدود الحساب أو افتح الموقع لإكمال التحقق."})
+                        return
+                    if "text/event-stream" not in upstream.headers.get("content-type", "").lower():
+                        yield sse_event({"type": "error", "message": "لم تُرجع Z.AI بثاً صالحاً؛ قد يلزم التحقق في الموقع."})
+                        return
+                    raw_text = ""
+                    previous = ("", "")
+                    async with aclosing(_qwen_sse_events(upstream)) as stream:
+                        async for item in stream:
+                            if item is None:
+                                yield b": keepalive\n\n"
+                                continue
+                            event, raw_data, _ = item
+                            done = raw_data == "[DONE]"
+                            if not done:
+                                if event == "error":
+                                    yield sse_event({"type": "error", "message": "رفضت Z.AI الطلب أو طلبت التحقق في الموقع."})
+                                    return
+                                try:
+                                    chunk = json.loads(raw_data)
+                                except (ValueError, TypeError):
+                                    continue
+                                if not isinstance(chunk, dict):
+                                    continue
+                                if chunk.get("error") or (chunk.get("code") not in (None, 0, 200)):
+                                    yield sse_event({"type": "error", "message": "رفضت Z.AI الطلب أو طلبت التحقق في الموقع."})
+                                    return
+                                data = chunk.get("data")
+                                if not isinstance(data, dict):
+                                    continue
+                                raw_text = zai_session.update_text(raw_text, data)
+                                done = data.get("phase") == "done"
+                            current = zai_session.split_text(raw_text, final=done)
+                            if current != previous:
+                                yield sse_event({"type": "snapshot", "reasoning": current[0], "answer": current[1]})
+                                previous = current
+                            if done:
+                                if not current[1].strip():
+                                    yield sse_event({"type": "error", "message": "لم تُرجع Z.AI جواباً."})
+                                else:
+                                    yield sse_event({"type": "done"})
+                                return
+                    yield sse_event({"type": "error", "message": "انقطع بث Z.AI قبل اكتمال الرد."})
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Upstream errors and URLs can contain credentials.
+            yield sse_event({"type": "error", "message": "تعذر الاتصال بـ Z.AI أو انتهت مهلة الطلب."})
+
+    return StreamingResponse(events(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no",
+    })
 
 
 async def _decode_upstream_image_response(client: httpx.AsyncClient, r: httpx.Response) -> tuple[bytes, str]:

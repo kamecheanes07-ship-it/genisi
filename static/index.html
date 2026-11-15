@@ -5703,7 +5703,7 @@ $('#toolsBtn').onclick = e => {
     {ic: I.mermaid, label: t.tChart, fn: () => ins(t.pChart)},
     {ic: I.doc, label: t.tDoc, fn: () => ins(t.pDoc)},
     {ic: I.file, label: t.tFile, fn: () => ins(t.pFile)},
-    {ic: I.sliders, label: state.deep ? t.deepOff : t.deepOn, fn: () => { state.deep = !state.deep; saveState(); toast(state.deep ? t.deepOnMsg : t.deepOffMsg); }},
+    {ic: I.sliders, label: state.routeMode==='carbon' ? 'التفكير دائم في Carbon' : (state.deep ? t.deepOff : t.deepOn), disabled:state.routeMode==='carbon', fn: () => { if(state.routeMode==='carbon') return; state.deep = !state.deep; saveState(); toast(state.deep ? t.deepOnMsg : t.deepOffMsg); }},
     {sep: 1},
     {ic: I.plus, label: t.attach, fn: () => $('#fileIn').click()},
     {ic: I.sliders, label: state.toolsOn ? t.agentOff : t.agentOn,
@@ -6625,7 +6625,7 @@ $('#wipeBtn').addEventListener('click',()=>setTimeout(()=>saveHistory(),0));
   document.querySelectorAll('#qDeepSeg button').forEach(b => b.onclick = () => { state.deep = b.dataset.v === '1'; syncDeep(); });
   $('#qSys').placeholder = 'فارغ = تعليمات Genisi 4 Atlas المدمجة';
 }
-function syncDeep(){ document.querySelectorAll('#qDeepSeg button').forEach(b => b.classList.toggle('on', (b.dataset.v === '1') === state.deep)); }
+function syncDeep(){ const locked=state.routeMode==='carbon'; document.querySelectorAll('#qDeepSeg button').forEach(b => { b.disabled=locked; b.title=locked?'التفكير مفعّل دائماً في Carbon':''; b.classList.toggle('on', (b.dataset.v === '1') === (locked || state.deep)); }); }
 new MutationObserver(() => {
   if ($('#settingsOverlay').classList.contains('on')){
     syncDeep();
@@ -6650,11 +6650,9 @@ $('#setClose').addEventListener('click', () => { saveState(); });
 (function installAdaptiveRouter(){
   const ROUTER_VERSION = '58.65.7-python-direct';
   const DEFAULT_QWEN_SPACE = '/api/models/qwen';
-  // One unified model routed strictly through our Python FastAPI backend (with native CORS headers, zero external proxies).
-  state.routeMode = 'auto';
-  localStorage.setItem('g3_route_mode', 'auto');
-  S.model = 'auto';
-  localStorage.setItem('g3_model', 'auto');
+  // Keep the user's explicit model selection across reloads.
+  state.routeMode = localStorage.getItem('g3_route_mode') === 'carbon' ? 'carbon' : 'auto';
+  S.model = state.routeMode;
   state.qwenOmniSpace = DEFAULT_QWEN_SPACE;
   state.qwenOmniEndpoint = 'chat_predict';
 
@@ -6821,19 +6819,23 @@ $('#setClose').addEventListener('click', () => { saveState(); });
   baseSys = function(){
     const prof = (ai.turnRoute && ai.turnRoute.profile) || 'general';
     const WINDOWS12_POLICY = 'WINDOWS 12 BUILT-IN DESIGN MODE: A detailed, self-contained Windows 12 concept-desktop specification is embedded in Genisi 4 Atlas. The host automatically appends the complete specification whenever this request or a contextual follow-up concerns Windows 12. Do not request, search for, read, or claim to have loaded any separate HTML file, Dataset record, screenshot, or attachment. Never stop because a reference file is missing. Build from the embedded design specification. Do not describe the concept as an official Microsoft product or real operating system. Implement the complete desktop and its required application interactions; do not substitute a generic mockup or placeholder-only app. Preserve all existing features and visual identity when modifying a prior result, and make only the requested change.';
-    const parts = [ATLAS_CORE, THINK_PROTOCOL, PLAYBOOKS[prof] || PLAYBOOKS.general, OUTPUT_QUALITY_GUARD, timeBlock(), FILE_PROMPT, WINDOWS12_POLICY,
+    const isCarbon = ai.turnRoute && ai.turnRoute.id === 'carbon';
+    const identity = isCarbon ? ATLAS_CORE.replaceAll('Genisi 4 Atlas', 'Genisi 4.1 Carbon').replaceAll('GENISI 4 ATLAS', 'GENISI 4.1 CARBON') : ATLAS_CORE;
+    const nativeThinking = 'Native reasoning is enabled by the model provider. Give the user the answer without requesting or emitting artificial thinking tags.';
+    const parts = [identity, isCarbon ? nativeThinking : THINK_PROTOCOL, PLAYBOOKS[prof] || PLAYBOOKS.general, OUTPUT_QUALITY_GUARD, timeBlock(), FILE_PROMPT, WINDOWS12_POLICY,
       state.toolsOn ? QWEN_CHAT_TOOLS_PROMPT : QWEN_NO_TOOLS_PROMPT];
     const custom = String(state.system || '').trim();
     if (custom) parts.push('USER CUSTOM PREFERENCES (secondary to the role, factuality, safety, and output rules above):\n' + custom);
     return parts.join('\n\n');
   };
 
-  const ROUTE_NAMES = {auto: 'Genisi 4 Atlas', qwen_omni: 'Genisi 4 Atlas'};
+  const ROUTE_NAMES = {auto: 'Genisi 4 Atlas', qwen_omni: 'Genisi 4 Atlas', carbon: 'Genisi 4.1 Carbon'};
   const ROUTE_DESCRIPTIONS = {
     auto: 'أحدث وأقوى نموذج في عائلة Genisi: محادثة متعددة الوسائط، برمجة، رياضيات وتحليل — يضبط دقته ويفكّر تلقائياً في المهام الحساسة.'
   };
 
   function routeProfile(){
+    if (state.routeMode === 'carbon') return {id:'carbon', name:ROUTE_NAMES.carbon};
     return {
       id: 'qwen_omni', name: ROUTE_NAMES.qwen_omni, space: String(state.qwenOmniSpace || DEFAULT_QWEN_SPACE).trim(),
       endpoint: String(state.qwenOmniEndpoint || 'chat_predict').trim() || 'chat_predict'
@@ -7165,7 +7167,7 @@ $('#setClose').addEventListener('click', () => { saveState(); });
       p: clampNum(P.p == null ? state.topP : P.p, 0.05, 1),
       k: Math.round(clampNum(P.k == null ? state.topK : P.k, 1, 100))
     };
-    const think = P.think ? (d.inherited ? 'soft' : 'force') : (state.deep ? 'force' : '');
+    const think = state.routeMode === 'carbon' ? 'force' : (P.think ? (d.inherited ? 'soft' : 'force') : (state.deep ? 'force' : ''));
     return {...routeProfile(), profile: d.profile, reason: d.reason, automatic: true, sampling, think, inherited: !!d.inherited};
   }
 
@@ -7192,28 +7194,21 @@ $('#setClose').addEventListener('click', () => { saveState(); });
   routerSettings.style.display = 'none';
   blk.after(routerSettings);
 
-  function selectRouteMode(){
-    state.routeMode='auto';
-    localStorage.setItem('g3_route_mode','auto');
-    S.model='auto'; localStorage.setItem('g3_model','auto');
-    applyLang();
+  function selectRouteMode(mode){
+    state.routeMode=mode === 'carbon' ? 'carbon' : 'auto';
+    localStorage.setItem('g3_route_mode',state.routeMode);
+    S.model=state.routeMode; localStorage.setItem('g3_model',S.model);
+    syncDeep(); applyLang();
   }
-  modelLabel = function(){ return 'Genisi 4 Atlas'; };
+  modelLabel = function(){ return state.routeMode === 'carbon' ? ROUTE_NAMES.carbon : ROUTE_NAMES.auto; };
   openModelMenu = function(anchor){
     const modelItems=[{
-      html:'<span style="font-size:17px">✦</span>',
-      label:'Genisi 4 Atlas',
-      small:ROUTE_DESCRIPTIONS.auto,
-      sel:true,
-      fn:()=>selectRouteMode('auto')
+      html:'<span style="font-size:17px">✦</span>', label:ROUTE_NAMES.auto,
+      small:ROUTE_DESCRIPTIONS.auto, sel:state.routeMode==='auto', fn:()=>selectRouteMode('auto')
+    },{
+      html:'<span style="font-size:17px">✦</span>', label:ROUTE_NAMES.carbon,
+      small:'Z.AI · تفكير دائم وبث مباشر', sel:state.routeMode==='carbon', fn:()=>selectRouteMode('carbon')
     }];
-    modelItems.splice(1,0,{
-      html:'<span style="font-size:17px;display:grid;place-items:center;width:22px;height:22px">✦</span>',
-      label:'Genisi 4.1 Carbon',
-      small:'قريباً',
-      disabled:true,
-      trailing:'<span title="قريباً" aria-label="مقفل — قريباً" style="display:grid;place-items:center;margin-inline-start:8px;color:var(--text3);flex:none"><svg class="ic sm" viewBox="0 0 24 24" aria-hidden="true"><rect x="4.8" y="10.2" width="14.4" height="10.3" rx="2"/><path d="M8 10.2V7.6a4 4 0 0 1 8 0v2.6"/></svg></span>'
-    });
     openPop('#modelPop',anchor,modelItems.concat([{sep:1},{html:I.sliders,label:'الإعدادات',small:'تفضيلات Genisi',fn:openSettings}]));
   };
 
@@ -7277,8 +7272,10 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     const hist=(state.history||[]).slice(-24).map(m=>({role:m.role,content:String(m.content||'')}));
     const s = r.sampling || {t: state.temp, p: state.topP, k: state.topK};
     let note = '';
-    if (stage === 'answer') note = ANSWER_NOW_NOTE;
-    else if (r.think) note = thinkNote(r.profile, stage === 'followup' ? 'followup' : (r.think === 'soft' ? 'soft' : 'force'));
+    if (r.id !== 'carbon') {
+      if (stage === 'answer') note = ANSWER_NOW_NOTE;
+      else if (r.think) note = thinkNote(r.profile, stage === 'followup' ? 'followup' : (r.think === 'soft' ? 'soft' : 'force'));
+    }
     let msg = String(text||'');
     if (note){
       if (msg) msg += '\n\n' + note;
@@ -7336,6 +7333,10 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),28000);
     try{
+      if(state.routeMode==='carbon'){
+        const candidate=await carbonRequest({text:ask,system:'Return exactly one concise chat title.',history:[]},controller.signal);
+        return String(candidate||'').replace(/[\r\n]+/g,' ').replace(/^[\"“”]+|[\"“”]+$/g,'').trim().slice(0,60);
+      }
       const data=[ask,null,null,null,[], 'Return exactly one concise chat title in the requested language.',0.2,0.8,12];
       const r=await fetch('/api/models/qwen/once',{
         method:'POST',
@@ -7434,6 +7435,10 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     const turn = ai.turnSignal, onStop = () => ac.abort();
     if (turn){ if (turn.aborted) ac.abort(); else turn.addEventListener('abort', onStop, {once: true}); }
     try {
+      if(state.routeMode==='carbon'){
+        const data=await carbonImageData(image);
+        return await carbonRequest({text:String(text||''),system:String(sys||''),history:[],image:data},ac.signal);
+      }
       const files = {};
       if (image) files.image = image instanceof File ? image
         : new File([image], 'image.' + (((image.type || 'image/png').split('/')[1] || 'png').replace('jpeg', 'jpg')), {type: image.type || 'image/png'});
@@ -7578,6 +7583,7 @@ $('#setClose').addEventListener('click', () => { saveState(); });
   ai.discoverGradio = discoverGradio;
   ai.uploadFilesToSpace = uploadFilesToSpace;
   ai.voiceTurn = async function(opts){
+    if(state.routeMode === 'carbon') throw new Error('المحادثة الصوتية غير مدعومة في Carbon حالياً. اختر Atlas.');
     opts = opts || {};
     const route = routeProfile();
     const signal = opts.signal;
@@ -7652,9 +7658,71 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     return latest;
   };
 
+  async function carbonImageData(file){
+    if(!file) return null;
+    if(file.size > 9*1024*1024) throw new Error('حجم الصورة في Carbon يجب ألا يتجاوز 9MB.');
+    return await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>resolve(String(reader.result||''));
+      reader.onerror=()=>reject(new Error('تعذرت قراءة الصورة.'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function carbonRequest(payload,signal,onDelta){
+    const response=await api('/api/models/carbon/stream',{
+      method:'POST', signal, body:JSON.stringify(payload)
+    });
+    if(!response.ok || !response.body){
+      const err=await response.json().catch(()=>({}));
+      throw new Error(err.detail || ('Carbon HTTP '+response.status));
+    }
+    const reader=response.body.getReader(), decoder=new TextDecoder();
+    let buffer='',answer='',reasoning='',finished=false;
+    function parse(block){
+      const lines=block.split('\n').filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trim());
+      if(!lines.length)return;
+      let event; try{event=JSON.parse(lines.join('\n'));}catch(e){throw new Error('استجابة Carbon غير صالحة.');}
+      if(event.type==='error') throw new Error(event.message||'خطأ من Carbon.');
+      if(event.type==='reasoning_delta') reasoning+=String(event.data||'');
+      if(event.type==='answer_delta') answer+=String(event.data||'');
+      if(event.type==='snapshot'){answer=String(event.answer||''); reasoning=String(event.reasoning||'');}
+      if(event.type==='done') finished=true;
+      if(onDelta && (event.type==='reasoning_delta'||event.type==='answer_delta'||event.type==='snapshot')) onDelta(answer,reasoning);
+    }
+    while(!finished){
+      const part=await reader.read();
+      if(part.done)break;
+      buffer+=decoder.decode(part.value,{stream:true});
+      buffer=buffer.replace(/\r\n/g,'\n');
+      let boundary;
+      while((boundary=buffer.indexOf('\n\n'))>=0){
+        const block=buffer.slice(0,boundary); buffer=buffer.slice(boundary+2); parse(block);
+      }
+    }
+    if(buffer.trim())parse(buffer);
+    if(!finished) throw new Error('انقطع بث Carbon قبل اكتمال الرد.');
+    return answer;
+  }
+
+  async function runCarbonProvider(text,files,stage){
+    if(files.audio || files.video) throw new Error('Carbon لا يدعم إرفاق الصوت أو الفيديو في هذا المسار حالياً. اختر Atlas لهذه المرفقات.');
+    const controller=new AbortController();
+    ai.busy=true; ai.received=''; ai.controller=controller; S.ctrl=controller;
+    try {
+      const image=await carbonImageData(files.image);
+      const data=buildQwenData(text,{},stage);
+      return await carbonRequest({text:data[0],history:data[4],system:data[5],image},controller.signal,onText);
+    } finally {
+      ai.busy=false;
+      if(ai.controller===controller) ai.controller=null;
+      if(S.ctrl===controller) S.ctrl=null;
+    }
+  }
+
   runTurn=async function(text,files,stage){
     const route=ai.turnRoute||{...routeProfile(),profile:'general',sampling:null,think:''};
-    const reply=await runQwenProvider(route,text,files,null,stage);
+    const reply=route.id === 'carbon' ? await runCarbonProvider(text,files,stage) : await runQwenProvider(route,text,files,null,stage);
     if(reply&&live&&/```genfile/i.test(reply)){try{await processFiles(reply);}catch(e){console.warn(e);}}
     return reply==null?reply:histClean(reply);
   };
