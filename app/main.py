@@ -173,7 +173,9 @@ async def shutdown() -> None:
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> FileResponse:
-    return FileResponse("static/index.html")
+    # Always fetch the current app shell after a deployment; stale HTML can
+    # otherwise keep old model menus and routes alive in the browser or a CDN.
+    return FileResponse("static/index.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/health")

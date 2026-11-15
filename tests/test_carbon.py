@@ -127,6 +127,12 @@ class CarbonGatewayTests(unittest.TestCase):
         self.assertEqual(zai_session.split_text('<det'), ('', ''))
         self.assertEqual(zai_session.split_text('<details>thinking</det'), ('thinking', ''))
 
+    def test_index_disables_caching_of_the_app_shell(self):
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('no-store', response.headers.get('cache-control', ''))
+        self.assertIn("small:'Z.AI · تفكير دائم وبث مباشر'", response.text)
+
     def test_frontend_routes(self):
         html = (Path(__file__).resolve().parents[1] / 'static/index.html').read_text()
         for value in ('/api/models/carbon/stream', '/api/models/qwen/stream', "state.routeMode==='carbon'", "event.type==='snapshot'", 'انقطع بث Carbon قبل اكتمال الرد'):
