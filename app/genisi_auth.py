@@ -1021,6 +1021,8 @@ def _clean_sessions(raw: list[Any]) -> list[dict[str, Any]]:
                 row["atts"] = [_clean_att_item(a) for a in message["atts"][:6] if isinstance(a, dict)]
             if message.get("docs"):
                 row["docs"] = str(message["docs"])[:30000]
+            if message.get("vision"):
+                row["vision"] = str(message["vision"])[:30000]
             messages.append(row)
         out.append({"title": title, "ts": ts, "msgs": messages})
     encoded = _json_bytes(out)

@@ -9,14 +9,16 @@ assert(start >= 0 && end > start, 'Carbon frontend functions not found');
 let requests = [], snapshots = [], mode = 'ok';
 const encoder = new TextEncoder();
 const context = {
-  AbortController, TextDecoder,
-  ai: {busy:false, received:'', controller:null}, S: {ctrl:null},
+  AbortController, TextDecoder, toast:()=>{},
+  ai: {busy:false, received:'', controller:null}, S: {ctrl:null}, live: {userMsg:{}},
   FileReader: class { readAsDataURL(file) { this.result=file.data; this.onload(); } },
   buildQwenData: text => [text, null, null, null, [{role:'user', content:'prior'}], 'system', 1, .95, 20],
   onText: (answer, reasoning) => snapshots.push([answer, reasoning]),
   api: async (path, opts) => {
     requests.push({path, opts});
-    const events = mode === 'partial'
+    const events = mode === 'vision'
+      ? [{type:'vision_description',description:'tree'}, {type:'snapshot',answer:'tree',reasoning:''}, {type:'done'}]
+      : mode === 'partial'
       ? [{type:'answer_delta',data:'partial'}]
       : mode === 'snapshot'
       ? [{type:'snapshot',answer:'قديم',reasoning:'تفكير'}, {type:'snapshot',answer:'جديد',reasoning:'تفكير جديد'}, {type:'done'}]
@@ -44,8 +46,26 @@ vm.runInContext(html.slice(start,end) + '\nthis.carbonProvider=runCarbonProvider
   mode='snapshot';
   assert.equal(await context.carbonOnce({text:'hello'}, undefined, context.onText), 'جديد');
   assert.deepEqual(snapshots.at(-1), ['جديد','تفكير جديد']);
+  mode='vision';
+  assert.equal(await context.carbonProvider('describe', {image:{size:8,data:'data:image/png;base64,abc'}}, 'first'), 'tree');
+  assert.equal(context.live.userMsg.vision, 'tree');
   mode='partial';
   await assert.rejects(context.carbonProvider('hello', {}, 'first'), /انقطع بث Carbon/);
   assert.equal(context.ai.busy, false);
+  // Execute the real outer agent loop with and without visual context. This
+  // also catches accidentally putting visionContext inside the router closure.
+  const outerStart=html.indexOf('  function visionContext(m){');
+  const outerEnd=html.indexOf('/* ===== Built-in Windows 12',outerStart);
+  const agent={live:{userMsg:{}},ai:{turn:1,stopLoop:false},state:{history:[],toolsOn:false},
+    attsToFiles:async()=>({files:{},docs:''}),runTurn:async()=> 'ok',answerOf:x=>x,
+    hasVisibleAnswer:()=>true,KIND_TOKEN:{}};
+  vm.createContext(agent);
+  vm.runInContext(html.slice(outerStart,outerEnd)+'\nthis.runAgent=agentLoopCore;',agent);
+  await agent.runAgent('hello',[],1);
+  assert.equal(agent.state.history[0].content,'hello');
+  agent.state.history=[]; agent.live.userMsg.vision='tree';
+  await agent.runAgent('what?',[],1);
+  assert.match(agent.state.history[0].content,/untrusted image data/);
+  assert.match(agent.state.history[0].content,/tree/);
   console.log('Carbon frontend streaming tests passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

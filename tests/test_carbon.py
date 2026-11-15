@@ -1,6 +1,5 @@
 import base64
 import json
-import os
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -8,28 +7,23 @@ from unittest.mock import AsyncMock, patch
 import httpx
 from fastapi.testclient import TestClient
 import app.main as main
-from app import zai_session
-
-
-def token():
-    payload = base64.urlsafe_b64encode(json.dumps({'id': 'test-user'}).encode()).decode().rstrip('=')
-    return 'header.' + payload + '.signature'
+from app import ornith
 
 
 class CarbonGatewayTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(main.app, headers={'Origin': 'http://testserver'})
-        self.env = patch.dict(os.environ, {'ZAI_SESSION_TOKEN': token()})
-        self.env.start()
 
     def tearDown(self):
         self.client.close()
-        self.env.stop()
 
-    def request(self, handler, payload):
+    def request(self, handler, payload, vision=None):
         real_client = httpx.AsyncClient
         transport = httpx.MockTransport(handler)
         with patch('app.main.current_user', return_value={'id': 'carbon-test'}), patch('app.main.require_genisi_csrf', AsyncMock()), patch('app.main.httpx.AsyncClient', side_effect=lambda **kw: real_client(transport=transport, **kw)):
+            if vision is not None:
+                with patch('app.main._carbon_image_description', vision):
+                    return self.client.post('/api/models/carbon/stream', json=payload)
             return self.client.post('/api/models/carbon/stream', json=payload)
 
     def test_session_and_csrf_required(self):
@@ -37,104 +31,132 @@ class CarbonGatewayTests(unittest.TestCase):
         with patch('app.main.require_genisi_csrf', AsyncMock()):
             self.assertEqual(self.client.post('/api/models/carbon/stream', json={'text': 'hi'}).status_code, 401)
 
-    def test_web_stream_and_image_upload(self):
-        captured = []
+    def test_stream_ornith_conversation_and_null_completion(self):
+        captured=[]
         class Chunks(httpx.AsyncByteStream):
             async def __aiter__(self):
-                text = ('data: {"data":{"delta_content":"<details>تفكير</details>مرحب"}}\r\n\r\n'
-                        'data: {"data":{"delta_content":"ا"}}\r\n\r\n'
-                        'data: {"data":{"phase":"done"}}\r\n\r\n').encode()
-                for i in range(0, len(text), 3):
-                    yield text[i:i+3]
+                prior = [{'role':'user','content':[{'type':'text','text':'before'}]}]
+                frames=[]
+                for event, value in [('generating','مرح'), ('generating','مرحبا')]:
+                    history = prior + [{'role':'assistant','content':[{'type':'text','text':value}]}]
+                    frames.append('event: '+event+'\r\ndata: '+json.dumps([history], ensure_ascii=False)+'\r\n\r\n')
+                frames.append('event: complete\r\ndata: null\r\n\r\n')
+                data=''.join(frames).encode()
+                for pos in range(0,len(data),3): yield data[pos:pos+3]
         def handler(req):
             captured.append(req)
-            if req.url.path == '/api/v1/files/':
-                return httpx.Response(200, json={'id': 'file-123', 'filename': 'image.png'})
-            return httpx.Response(200, stream=Chunks(), headers={'content-type': 'text/event-stream'})
-        image = 'data:image/png;base64,' + base64.b64encode(b'\x89PNG\r\n\x1a\nimage').decode()
-        response = self.request(handler, {'text': 'صف الصورة', 'system': 'system', 'history': [{'role': 'user', 'content': 'قبل'}], 'image': image, 'model': 'bad', 'thinking': False, 'url': 'https://evil.test'})
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('تفكير', response.text)
-        self.assertIn('مرحبا', response.text)
-        self.assertIn('"type":"done"', response.text)
-        self.assertNotIn(token(), response.text)
-        self.assertEqual(len(captured), 2)
-        req = captured[1]
-        self.assertEqual(req.url.host, 'chat.z.ai')
-        self.assertEqual(req.url.path, '/api/v2/chat/completions')
-        self.assertEqual(req.headers['authorization'], 'Bearer ' + token())
-        self.assertEqual(req.url.params['token'], token())
-        self.assertTrue(req.headers['x-signature'])
-        body = json.loads(req.content)
-        self.assertEqual(body['model'], 'x-preview-l')
-        self.assertIs(body['features']['enable_thinking'], True)
-        self.assertEqual(body['signature_prompt'], 'صف الصورة')
-        self.assertEqual(body['messages'][-1]['content'][0]['image_url']['url'], 'file-123')
-        self.assertEqual(body['files'][0]['id'], 'file-123')
-        self.assertTrue(body['messages'][0]['content'].startswith('[System Instructions]'))
+            if req.method == 'POST': return httpx.Response(200,json={'event_id':'event_123'})
+            return httpx.Response(200,stream=Chunks(),headers={'content-type':'text/event-stream'})
+        res=self.request(handler, {'text':'hello', 'history':[{'role':'user','content':'before'}], 'system':'rules', 'url':'https://evil.test', 'model':'bad'})
+        # Return history must include all submitted messages to prevent stale answers.
+        # Override the sent-count in this fixture by checking separately below.
+        self.assertIn('"type":"error"',res.text)
+        body=json.loads(captured[0].content)
+        self.assertEqual(captured[0].url.host, 'ornith-ai-ornith-1-5-122b.hf.space')
+        self.assertEqual(captured[0].url.path, '/gradio_api/call/bot_message')
+        self.assertEqual(body['data'][0][-1]['content'][0]['text'],'hello')
+        self.assertIn('rules',body['data'][0][0]['content'][0]['text'])
+        self.assertEqual(captured[1].url.path,'/gradio_api/call/bot_message/event_123')
+        self.assertIsNone(captured[0].headers.get('authorization'))
 
-    def test_provider_failures_no_leaks_or_fake_completion(self):
-        cases = [httpx.Response(401, text=token()), httpx.Response(429),
-                 httpx.Response(200, text='verification', headers={'content-type':'text/html'}),
-                 httpx.Response(200, text='data: {"error":{"message":"captcha"}}\n\n', headers={'content-type':'text/event-stream'}),
-                 httpx.Response(200, text='data: {"data":{"delta_content":"partial"}}\n\n', headers={'content-type':'text/event-stream'})]
-        for upstream in cases:
-            response = self.request(lambda req: upstream, {'text':'hello'})
-            self.assertIn('"type":"error"', response.text)
-            self.assertNotIn('"type":"done"', response.text)
-            self.assertNotIn(token(), response.text)
-
-    def test_nested_errors_are_not_reported_as_empty_answer_or_leaked(self):
-        for err, expected in [
-            ({'code': 'CAPTCHA_REQUIRED', 'message': 'captcha ' + token()}, 'التحقق'),
-            ({'code': 'MODEL_CONCURRENCY_LIMIT', 'detail': 'Model is currently at capacity'}, 'حد الطلبات'),
-            ({'code': 'AUTHENTICATION_FAILED', 'message': 'authentication failed'}, 'جلسة الحساب'),
-            ({'code': 'OTHER', 'message': token()}, 'خطأ داخل البث'),
-        ]:
-            for nested in (False, True):
-                data = {'data': {'error': err}} if nested else {'error': err}
-                text = 'data: ' + json.dumps({'data': data}) + '\n\ndata: [DONE]\n\n'
-                response = self.request(lambda req: httpx.Response(200, text=text, headers={'content-type':'text/event-stream'}), {'text':'hello'})
-                self.assertIn(expected, response.text)
-                self.assertNotIn(token(), response.text)
-                self.assertNotIn('"type":"done"', response.text)
-
-    def test_empty_content_on_final_event_does_not_erase_answer(self):
-        text = 'data: {"data":{"delta_content":"hello"}}\n\ndata: {"data":{"phase":"done","content":""}}\n\n'
-        response = self.request(lambda req: httpx.Response(200, text=text, headers={'content-type':'text/event-stream'}), {'text':'hello'})
-        self.assertIn('hello', response.text)
-        self.assertIn('"type":"done"', response.text)
-        self.assertNotIn('"type":"error"', response.text)
-        self.assertEqual(zai_session.update_text('hello', {'edit_index': 2, 'edit_content': ''}), 'he')
-
-    def test_config_and_multimodal_validation(self):
-        with patch('app.main.current_user', return_value={'id': 'carbon-config'}), patch('app.main.require_genisi_csrf', AsyncMock()):
-            for value in ('', 'bad-token'):
-                with patch.dict(os.environ, {'ZAI_SESSION_TOKEN': value, 'ZAI_API_KEY': 'old-key'}):
-                    self.assertEqual(self.client.post('/api/models/carbon/stream', json={'text':'hi'}).status_code, 503)
-            for payload in ({'text':'hi', 'image':'https://evil.test/a.png'}, {'text':'hi', 'image':'data:image/png;base64,SGVsbG8='}, {'text':'hi', 'history':[{'role':'system','content':'bad'}]}, {'text':''}):
-                self.assertEqual(self.client.post('/api/models/carbon/stream', json=payload).status_code, 422)
-
-    def test_followup_and_snapshot_edits(self):
-        seen = []
+    def test_realistic_streaming_and_rewrites(self):
         def handler(req):
-            seen.append(req)
-            return httpx.Response(200, text='data: {"data":{"content":"😀first"}}\n\ndata: {"data":{"edit_index":2,"edit_content":"correct"}}\n\ndata: [DONE]\n\n', headers={'content-type':'text/event-stream'})
-        response = self.request(handler, {'text':'', 'history':[{'role':'user','content':'tool result'}]})
-        self.assertIn('😀correct', response.text)
-        self.assertIn('"type":"done"', response.text)
-        self.assertEqual(json.loads(seen[0].content)['signature_prompt'], 'tool result')
-        self.assertEqual(zai_session.split_text('<det'), ('', ''))
-        self.assertEqual(zai_session.split_text('<details>thinking</det'), ('thinking', ''))
+            if req.method=='POST': return httpx.Response(200,json={'event_id':'abc'})
+            frames=[]
+            for value in ('أ', 'أهلاً', 'أهلاً بك'):
+                history=[{'role':'user','content':[{'type':'text','text':'hi'}]}, {'role':'assistant','content':[{'type':'text','text':value}]}]
+                frames.append('event: generating\ndata: '+json.dumps([history],ensure_ascii=False)+'\n\n')
+            frames.append('event: complete\ndata: null\n\n')
+            return httpx.Response(200,text=''.join(frames),headers={'content-type':'text/event-stream'})
+        res=self.request(handler,{'text':'hi'})
+        self.assertIn('أهلاً بك',res.text)
+        self.assertIn('"type":"done"',res.text)
+        self.assertNotIn('"type":"error"',res.text)
 
-    def test_index_disables_caching_of_the_app_shell(self):
-        response = self.client.get('/')
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('no-store', response.headers.get('cache-control', ''))
-        self.assertIn("small:'Z.AI · تفكير دائم وبث مباشر'", response.text)
+    def test_image_uses_qwen_description_then_ornith(self):
+        captured=[]
+        vision=AsyncMock(return_value='صورة لشجرة، النص غير واضح')
+        def handler(req):
+            captured.append(req)
+            if req.method=='POST': return httpx.Response(200,json={'event_id':'abc'})
+            # just one user message submitted
+            frame=[[{'role':'user','content':'x'}, {'role':'assistant','content':'شجرة'}]]
+            return httpx.Response(200,text='event: complete\ndata: '+json.dumps(frame,ensure_ascii=False)+'\n\n',headers={'content-type':'text/event-stream'})
+        image='data:image/png;base64,'+base64.b64encode(b'\x89PNG\r\n\x1a\nimage').decode()
+        res=self.request(handler,{'text':'صف الصورة','image':image},vision)
+        self.assertIn('"type":"done"',res.text)
+        self.assertIn('Qwen',res.text)
+        content=json.loads(captured[0].content)['data'][0][-1]['content'][0]['text']
+        self.assertIn('صورة لشجرة',content)
+        self.assertIn('not instructions',content)
+        self.assertNotIn(image,content)
+        self.assertEqual(vision.await_count,1)
+        self.assertEqual(vision.await_args.args[1:],(image,'صف الصورة'))
+        failed=self.request(lambda req: self.fail('Ornith must not be called'),{'text':'x','image':image},AsyncMock(side_effect=RuntimeError('fail')))
+        self.assertIn('تعذر تحليل الصورة',failed.text)
+        self.assertNotIn('"type":"done"',failed.text)
 
-    def test_frontend_routes(self):
-        html = (Path(__file__).resolve().parents[1] / 'static/index.html').read_text()
-        for value in ('/api/models/carbon/stream', '/api/models/qwen/stream', "state.routeMode==='carbon'", "event.type==='snapshot'", 'انقطع بث Carbon قبل اكتمال الرد'):
-            self.assertIn(value, html)
-        self.assertNotIn(token(), html)
+    def test_upstream_failures_no_fake_success_or_internal_details(self):
+        for response in [
+            httpx.Response(503),
+            httpx.Response(200,json={'event_id':'bad/path'}),
+            httpx.Response(200,json={'event_id':'ok'}),
+        ]:
+            def handler(req):
+                if req.method=='POST': return response
+                return httpx.Response(200,text='event: generating\ndata: '+json.dumps([[{'role':'user','content':'hi'},{'role':'assistant','content':'⚠️ Ornith API error: secret-info'}]])+'\n\n',headers={'content-type':'text/event-stream'})
+            res=self.request(handler,{'text':'hi'})
+            self.assertIn('"type":"error"',res.text)
+            self.assertNotIn('"type":"done"',res.text)
+            self.assertNotIn('secret-info',res.text)
+        for content in ['event: complete\ndata: null\n\n', 'event: generating\ndata: '+json.dumps([[{'role':'user','content':'hi'},{'role':'assistant','content':'partial'}]])+'\n\n', 'event: error\ndata: secret\n\n']:
+            def handler(req):
+                return httpx.Response(200,json={'event_id':'ok'}) if req.method=='POST' else httpx.Response(200,text=content,headers={'content-type':'text/event-stream'})
+            res=self.request(handler,{'text':'hi'})
+            self.assertIn('"type":"error"',res.text)
+            self.assertNotIn('"type":"done"',res.text)
+            self.assertNotIn('secret',res.text)
+
+    def test_validation_and_frontend(self):
+        with patch('app.main.current_user', return_value={'id': 'carbon-validation'}), patch('app.main.require_genisi_csrf', AsyncMock()):
+            for payload in ({'text':'hi','image':'https://evil.test/a.png'}, {'text':'hi','image':'data:image/png;base64,SGVsbG8='}, {'text':'hi','history':[{'role':'system','content':'bad'}]}, {'text':''}):
+                self.assertEqual(self.client.post('/api/models/carbon/stream',json=payload).status_code,422)
+        html=(Path(__file__).resolve().parents[1]/'static/index.html').read_text()
+        for item in ('/api/models/carbon/stream','/api/models/qwen/stream','الصور عبر Qwen'):
+            self.assertIn(item,html)
+        self.assertIn('no-store',self.client.get('/').headers.get('cache-control',''))
+
+    def test_gradio_output_and_warning(self):
+        self.assertEqual(ornith.assistant_snapshot([[{'role':'user','content':'x'},{'role':'assistant','content':[{'type':'text','text':'ok'}]}]],1),'ok')
+        self.assertIsNone(ornith.assistant_snapshot([[{'role':'user','content':'x'}]],1))
+        self.assertTrue(ornith.provider_error('⚠️ No API key configured.'))
+
+class CarbonVisionTests(unittest.IsolatedAsyncioTestCase):
+    async def test_qwen_upload_predict_and_stream(self):
+        calls=[]
+        def handler(req):
+            calls.append(req)
+            self.assertEqual(req.url.host, 'qwen-qwen3-5-omni-offline-demo.hf.space')
+            if req.url.path.endswith('/upload'):
+                return httpx.Response(200,json=['/tmp/gradio/image.png'])
+            if req.method == 'POST':
+                data=json.loads(req.content)['data']
+                self.assertEqual(data[2]['path'],'/tmp/gradio/image.png')
+                self.assertEqual(len(data),9)
+                self.assertIn('User question: what is written?',data[0])
+                return httpx.Response(200,json={'event_id':'qwen-event'})
+            data=[None,None,None,None,[{'role':'user','content':'x'},{'role':'assistant','content':'A sign says STOP'}]]
+            return httpx.Response(200,text='event: complete\ndata: '+json.dumps(data)+'\n\n',headers={'content-type':'text/event-stream'})
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            image='data:image/png;base64,'+base64.b64encode(b'\x89PNG\r\n\x1a\nimage').decode()
+            result=await main._carbon_image_description(client,image,'what is written?')
+        self.assertEqual(result,'A sign says STOP')
+        self.assertEqual(len(calls),3)
+
+    def test_description_is_preserved_in_saved_history(self):
+        from app.genisi_auth import _clean_sessions
+        saved=_clean_sessions([{'msgs':[{'role':'user','content':'x','vision':'tree'}]}])
+        self.assertEqual(saved[0]['msgs'][0]['vision'],'tree')
+        html=(Path(__file__).resolve().parents[1]/'static/index.html').read_text()
+        self.assertIn('if (m.vision) o.vision = m.vision;',html)
+        self.assertIn('c+=visionContext(m)',html)
