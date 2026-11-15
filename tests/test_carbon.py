@@ -84,6 +84,29 @@ class CarbonGatewayTests(unittest.TestCase):
             self.assertNotIn('"type":"done"', response.text)
             self.assertNotIn(token(), response.text)
 
+    def test_nested_errors_are_not_reported_as_empty_answer_or_leaked(self):
+        for err, expected in [
+            ({'code': 'CAPTCHA_REQUIRED', 'message': 'captcha ' + token()}, 'التحقق'),
+            ({'code': 'MODEL_CONCURRENCY_LIMIT', 'detail': 'Model is currently at capacity'}, 'حد الطلبات'),
+            ({'code': 'AUTHENTICATION_FAILED', 'message': 'authentication failed'}, 'جلسة الحساب'),
+            ({'code': 'OTHER', 'message': token()}, 'خطأ داخل البث'),
+        ]:
+            for nested in (False, True):
+                data = {'data': {'error': err}} if nested else {'error': err}
+                text = 'data: ' + json.dumps({'data': data}) + '\n\ndata: [DONE]\n\n'
+                response = self.request(lambda req: httpx.Response(200, text=text, headers={'content-type':'text/event-stream'}), {'text':'hello'})
+                self.assertIn(expected, response.text)
+                self.assertNotIn(token(), response.text)
+                self.assertNotIn('"type":"done"', response.text)
+
+    def test_empty_content_on_final_event_does_not_erase_answer(self):
+        text = 'data: {"data":{"delta_content":"hello"}}\n\ndata: {"data":{"phase":"done","content":""}}\n\n'
+        response = self.request(lambda req: httpx.Response(200, text=text, headers={'content-type':'text/event-stream'}), {'text':'hello'})
+        self.assertIn('hello', response.text)
+        self.assertIn('"type":"done"', response.text)
+        self.assertNotIn('"type":"error"', response.text)
+        self.assertEqual(zai_session.update_text('hello', {'edit_index': 2, 'edit_content': ''}), 'he')
+
     def test_config_and_multimodal_validation(self):
         with patch('app.main.current_user', return_value={'id': 'carbon-config'}), patch('app.main.require_genisi_csrf', AsyncMock()):
             for value in ('', 'bad-token'):

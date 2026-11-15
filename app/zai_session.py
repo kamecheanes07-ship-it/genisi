@@ -87,15 +87,58 @@ def split_text(raw, final=False):
 
 
 def update_text(raw, data):
-    if isinstance(data.get('edit_content'), str):
+    if isinstance(data.get('edit_content'), str) and (data['edit_content'] or isinstance(data.get('edit_index'), int)):
         # Browser offsets count UTF-16 code units, not Python characters.
         index = data.get('edit_index', 0)
         if not isinstance(index, int) or index < 0:
             index = 0
         prefix = raw.encode('utf-16-le')[:index * 2].decode('utf-16-le', errors='ignore')
         return prefix + data['edit_content']
-    if isinstance(data.get('content'), str):
+    # The provider can send an empty content field in a terminal frame.
+    # It is not a replacement for the text already streamed.
+    if isinstance(data.get('content'), str) and data['content']:
         return data['content']
     if isinstance(data.get('delta_content'), str):
         return raw + data['delta_content']
     return raw
+
+
+def error_message(chunk, event='message'):
+    """Classify embedded errors without returning provider data or secrets."""
+    nodes = [chunk]
+    node = chunk
+    for _ in range(2):
+        if not isinstance(node, dict) or not isinstance(node.get('data'), dict):
+            break
+        node = node['data']
+        nodes.append(node)
+    errors = []
+    for node in nodes:
+        err = node.get('error')
+        if err:
+            errors.append(err)
+        if str(node.get('phase', '')).lower() in ('error', 'failed'):
+            errors.append(node)
+    if event == 'error' and not errors:
+        errors.append(chunk)
+    if not errors and chunk.get('code') not in (None, 0, 200):
+        errors.append(chunk)
+    if not errors:
+        return None
+    # Read only common error fields; never expose their raw values to clients.
+    hints = []
+    for err in errors:
+        if isinstance(err, dict):
+            hints.extend(str(err.get(key, ''))[:500].lower() for key in ('code', 'detail', 'message', 'type'))
+        elif isinstance(err, str):
+            hints.append(err[:500].lower())
+    hint = ' '.join(hints)
+    if any(x in hint for x in ('captcha', 'verification', 'verify', 'challenge', 'waf')):
+        return 'طلبت Z.AI التحقق أو رفضت الطلب أمنياً. افتح الموقع وأكمل التحقق؛ قد لا يدعم الربط التجريبي التحقق المطلوب.'
+    if any(x in hint for x in ('rate limit', 'rate_limit', 'quota', 'capacity', 'concurrency', 'too many')):
+        return 'وصل حساب Z.AI إلى حد الطلبات أو سعة النموذج؛ انتظر وحاول لاحقاً.'
+    if any(x in hint for x in ('unauthorized', 'invalid token', 'token expired', 'authentication', 'unauthenticated')):
+        return 'رفضت Z.AI جلسة الحساب؛ جدّد توكن الجلسة في أسرار الاستضافة.'
+    if 'model' in hint and any(x in hint for x in ('invalid', 'not found', 'unavailable', 'not supported')):
+        return 'نموذج Carbon غير متاح لحساب Z.AI أو تغيّر معرّفه على الموقع.'
+    return 'أعادت Z.AI خطأ داخل البث؛ تحقق من الجلسة وحدود الحساب والتحقق في الموقع.'

@@ -1714,17 +1714,18 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                             event, raw_data, _ = item
                             done = raw_data == "[DONE]"
                             if not done:
-                                if event == "error":
-                                    yield sse_event({"type": "error", "message": "رفضت Z.AI الطلب أو طلبت التحقق في الموقع."})
-                                    return
                                 try:
                                     chunk = json.loads(raw_data)
                                 except (ValueError, TypeError):
+                                    if event == "error":
+                                        yield sse_event({"type": "error", "message": "أعادت Z.AI خطأ داخل البث؛ تحقق من الجلسة والتحقق في الموقع."})
+                                        return
                                     continue
                                 if not isinstance(chunk, dict):
                                     continue
-                                if chunk.get("error") or (chunk.get("code") not in (None, 0, 200)):
-                                    yield sse_event({"type": "error", "message": "رفضت Z.AI الطلب أو طلبت التحقق في الموقع."})
+                                error_message = zai_session.error_message(chunk, event)
+                                if error_message:
+                                    yield sse_event({"type": "error", "message": error_message})
                                     return
                                 data = chunk.get("data")
                                 if not isinstance(data, dict):
@@ -1737,7 +1738,7 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                                 previous = current
                             if done:
                                 if not current[1].strip():
-                                    yield sse_event({"type": "error", "message": "لم تُرجع Z.AI جواباً."})
+                                    yield sse_event({"type": "error", "message": "أنهت Z.AI البث دون إجابة أو سبب واضح. تحقق من جلسة الحساب والتحقق على الموقع وتوفّر النموذج؛ قد لا يدعم الربط التجريبي متطلبات الموقع الحالية."})
                                 else:
                                     yield sse_event({"type": "done"})
                                 return
