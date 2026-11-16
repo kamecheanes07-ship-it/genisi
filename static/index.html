@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ar" dir="ltr" class="side-collapsed">
+<html lang="en" dir="ltr" class="side-collapsed">
 <head>
 <script>/* v58.37 — نمط Gemini: يبدأ بعمود الأيقونات (rail) والقائمة الجانبية مطوية */
 if(innerWidth>760)document.documentElement.classList.add('side-collapsed');</script>
@@ -351,7 +351,7 @@ html[dir="rtl"]:not(.side-collapsed) #rail{transform:translateX(14px)}
 .attach .fname{font-size:9.5px;color:var(--text2);padding:0 4px;text-align:center;overflow:hidden;max-height:34px;word-break:break-all;line-height:1.25}
 .attach .rm{position:absolute;top:2px;inset-inline-end:2px;width:19px;height:19px;border-radius:50%;background:rgba(0,0,0,.65);color:#fff;display:grid;place-items:center}
 .attach .rm:hover{background:rgba(0,0,0,.9)}
-.micRec #micBtn{color:#fff;background:var(--danger);animation:pulse 1.2s infinite}
+#sendBtn.recording{color:#fff;background:var(--danger);animation:pulse 1.2s infinite}
 .crowFill{flex:1}
 
 /* ── لوحة البحث العائمة (نمط Gemini) ── */
@@ -1839,6 +1839,21 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
 }
 @media(max-width:380px){#authOverlay .atlas-challenge-options{grid-template-columns:repeat(2,minmax(0,1fr))}.auth-showcase{min-height:310px}.auth-content-inner{padding:20px 0}}
 
+/* Compact composer: one primary action for dictation, sending, or stopping. */
+.composer{border-radius:30px;border-color:var(--border2);padding:8px 12px;min-height:74px}
+.comp-pill-row{gap:8px;min-height:56px}
+.crow1{padding:0 2px}
+.crow2{gap:6px}
+#input{padding-inline:6px}
+#sendBtn.voice{color:var(--text2);background:var(--surface3)}
+#sendBtn.voice:hover{color:var(--text);filter:brightness(1.12)}
+#sendBtn:focus-visible,#liveCallBtn:focus-visible,#plusBtn:focus-visible,#modelBtn:focus-visible{outline:2px solid var(--blue-h);outline-offset:2px}
+@media(max-width:760px){
+  .composer{padding:8px 10px;min-height:0}
+  .comp-pill-row{min-height:0}
+  .crow1{padding:2px 4px}
+}
+
 /* Keep the entry screen within ordinary laptop viewports; scroll only when necessary. */
 #authOverlay .auth-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
 #authOverlay .auth-fields .field{min-width:0}
@@ -1910,7 +1925,9 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
   #authOverlay .atlas-captcha .sub{display:none}
 }
 #authOverlay.auth-loading .auth-shell{visibility:hidden}
-#authOverlay.auth-loading:after{content:'جارٍ التحقق من الجلسة…';position:fixed;inset:0;display:grid;place-items:center;color:#625468;font-size:13px;pointer-events:none}
+#authOverlay.auth-loading:after{content:'Checking your session…';position:fixed;inset:0;display:grid;place-items:center;color:#625468;font-size:13px;pointer-events:none}
+html[lang="ar"] #authOverlay.auth-loading:after{content:'جارٍ التحقق من الجلسة…'}
+html[lang="fr"] #authOverlay.auth-loading:after{content:'Vérification de votre session…'}
 .auth-showcase-bottom[dir="ltr"]{text-align:left}.auth-showcase-bottom[dir="ltr"] .auth-story h2{text-align:left}
 .auth-pass-wrap{position:relative}#authOverlay .auth-pass-wrap input{padding-left:70px}#fPassToggle{position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:600;color:#9e3f8d;padding:6px;border-radius:8px}#fPassToggle:focus-visible{outline:2px solid #c652aa;outline-offset:2px}
 @media(max-width:760px){.auth-showcase:after{background:linear-gradient(180deg,transparent 18%,rgba(40,25,75,.38) 54%,rgba(35,22,67,.67) 100%)}}
@@ -2134,7 +2151,7 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
         <div class="mtabs"><button type="button" class="mtab on" id="mtLogin"></button><button type="button" class="mtab" id="mtReg"></button></div>
         <div id="authForm"><div class="auth-session-loading" role="status">جارٍ التحقق من الجلسة…</div></div>
       </div>
-      <div class="auth-footer"><span>© AnesNT · Genisi</span><span>صُنع في الجزائر <span aria-hidden="true">✦</span></span></div>
+      <div class="auth-footer"><span>© AnesNT · Genisi</span><span id="authMadeIn">Made in Algeria ✦</span></div>
     </section>
   </div>
 </div>
@@ -2294,7 +2311,7 @@ ar:{dir:'rtl', newChat:'محادثة جديدة', search:'بحث', gallery:'ال
   logout:'خروج', acctTitle:'حسابي',
   mFlash:'فلاش', mPro:'برو', mCodex:'كودكس', mFlashD:'سريع للاسئلة اليومية', mProD:'الأقوى — تفكير عميق', mCodexD:'مصمم للبرمجة والأدوات',
   thinking:'يفكّر', thought:'فكّر لمدة', sec:' ث', answering:'جارٍ الإجابة', lines:'سطر',
-  send:'إرسال', stopGen:'إيقاف', listening:'يتحدث الآن…',
+  send:'إرسال', stopGen:'إيقاف', listening:'يستمع إليك الآن…', dictate:'الإملاء الصوتي', stopDictation:'إيقاف الإملاء الصوتي', micUnavailable:'الإملاء الصوتي غير متاح في هذا المتصفح.', micError:'تعذر استخدام الميكروفون. تحقق من الإذن وحاول مجدداً.',
   attach:'إرفاق', attachMax:'حتى 6 ملفات × 9MB',
   wImage:'جارٍ إنشاء صورتك', wVideo:'جارٍ إنشاء الفيديو', wAudio:'جارٍ تأليف الصوت', wSearch:'يبحث في الويب',
   wRead:'يقرأ الصفحة', wWrite:'يكتب الملف', wEdit:'يعدّل الملف', wApp:'يبني التطبيق', wAnalyze:'يحلّل الوسائط',
@@ -2340,7 +2357,7 @@ fr:{dir:'ltr', newChat:'Nouvelle conversation', search:'Rechercher', gallery:'Ga
   logout:'Déconnexion', acctTitle:'Mon compte',
   mFlash:'Flash', mPro:'Pro', mCodex:'Codex', mFlashD:'Rapide pour le quotidien', mProD:'Le plus puissant — réflexion profonde', mCodexD:'Conçu pour le code et les outils',
   thinking:'Réfléchit', thought:'A réfléchi pendant', sec:'s', answering:'Réponse en cours', lines:'lignes',
-  send:'Envoyer', stopGen:'Arrêter', listening:'Écoute…',
+  send:'Envoyer', stopGen:'Arrêter', listening:'Écoute…', dictate:'Dictée vocale', stopDictation:'Arrêter la dictée vocale', micUnavailable:'La dictée vocale n’est pas disponible dans ce navigateur.', micError:'Impossible d’utiliser le microphone. Vérifiez les autorisations.',
   attach:'Joindre', attachMax:'6 fichiers max × 9 Mo',
   wImage:'Création de votre image', wVideo:'Création de la vidéo', wAudio:'Composition du son', wSearch:'Recherche sur le web',
   wRead:'Lecture de la page', wWrite:'Écriture du fichier', wEdit:'Modification du fichier', wApp:'Construction de l’appli', wAnalyze:'Analyse des médias',
@@ -2386,7 +2403,7 @@ en:{dir:'ltr', newChat:'New chat', search:'Search', gallery:'Gallery', history:'
   logout:'Sign out', acctTitle:'My account',
   mFlash:'Flash', mPro:'Pro', mCodex:'Codex', mFlashD:'Fast daily driver', mProD:'Most powerful — deep thinking', mCodexD:'Built for code and tools',
   thinking:'Thinking', thought:'Thought for', sec:'s', answering:'Answering', lines:'lines',
-  send:'Send', stopGen:'Stop', listening:'Listening…',
+  send:'Send', stopGen:'Stop', listening:'Listening…', dictate:'Voice dictation', stopDictation:'Stop voice dictation', micUnavailable:'Voice dictation is not available in this browser.', micError:'Could not use the microphone. Check your permissions and try again.',
   attach:'Attach', attachMax:'up to 6 files × 9MB',
   wImage:'Creating your image', wVideo:'Creating the video', wAudio:'Composing audio', wSearch:'Searching the web',
   wRead:'Reading the page', wWrite:'Writing the file', wEdit:'Editing the file', wApp:'Building the app', wAnalyze:'Analyzing media',
@@ -2409,7 +2426,7 @@ const $ = s => document.querySelector(s);
 const S = {
   token: '',
   user: null,
-  lang: localStorage.getItem('g3_lang') || 'ar',
+  lang: ['ar','en','fr'].includes(localStorage.getItem('g3_lang')) ? localStorage.getItem('g3_lang') : 'en',
   theme: localStorage.getItem('g3_theme') || 'dark',
   model: localStorage.getItem('g3_model') || 'flash',
   modelInfo: {},
@@ -2641,12 +2658,14 @@ function applyLang(){
   $('#lblStatSessions').textContent = t.statSessions; $('#lblStatMsgs').textContent = t.statMsgs; $('#lblStatImages').textContent = t.statImages;
   renderPlanCard();
   $('#modelBtn').innerHTML = '<span>' + modelLabel(S.model) + '</span>' + I.chev; updatePh();
+  $('#plusBtn').title = t.attach; $('#plusBtn').setAttribute('aria-label', t.attach);
   const _mc = $('#modelChipName'); if (_mc) _mc.textContent = modelLabel(S.model);
   $('#lbClose').innerHTML = I.x;
   $('#lbDownload').innerHTML = I.download;
   renderAvatar(); renderHomeHero(); renderSessions(); renderFiles(); renderGallery(); renderSync(S.sync); renderPlanBadge(); renderSuggestions();
   if (S.cur >= 0) { /* re-render static thread labels */ }
   const bn = $('#busyNote'); if (bn && bn.classList.contains('on')) bn.lastElementChild.textContent = T().thinking + '…';
+  refreshSend();
 }
 function updatePh(){
   if (input) input.placeholder = ($('#viewChat').classList.contains('on')) ? T().chatPh : T().askPh;
@@ -2733,7 +2752,6 @@ function buildComposer(){
       '<div class="crow2">' +
         '<button id="modelBtn" type="button"></button>' +
         '<button class="cbtn live-call-btn" id="liveCallBtn" type="button" title="وضع التحدث المباشر">' + I.live + '</button>' +
-        '<button class="cbtn" id="micBtn" type="button">' + I.mic + '</button>' +
         '<button id="sendBtn" type="button" title="send">' + I.up + '</button>' +
       '</div>' +
     '</div>';
@@ -2741,7 +2759,7 @@ function buildComposer(){
 }
 const composerEl = buildComposer();
 $('#homeSlot').appendChild(composerEl);
-$('#liveCallBtn').onclick = () => { if (openVoiceCallHook) openVoiceCallHook(); };
+$('#liveCallBtn').onclick = () => { stopComposerDictation(); if (openVoiceCallHook) openVoiceCallHook(); };
 function placeComposer(chat){
   (chat ? $('#chatSlot') : $('#homeSlot')).appendChild(composerEl);
   updatePh();
@@ -2759,8 +2777,12 @@ function autoGrow(){
 }
 function refreshSend(){
   const b = $('#sendBtn');
-  if (S.streaming){ b.className = 'stop'; b.classList.add('stop'); b.innerHTML = I.stop; b.title = T().stopGen; }
-  else { b.className = input.value.trim() || S.attachments.length ? 'ready' : ''; b.innerHTML = I.up; b.title = T().send; }
+  const hasContent = !!(input.value.trim() || S.attachments.length);
+  let label;
+  if (S.streaming){ b.className = 'stop'; b.innerHTML = I.stop; label = T().stopGen; }
+  else if (hasContent){ b.className = 'ready'; b.innerHTML = I.up; label = T().send; }
+  else { b.className = S.rec ? 'recording' : 'voice'; b.innerHTML = I.mic; label = S.rec ? T().stopDictation : T().dictate; }
+  b.title = label; b.setAttribute('aria-label', label);
   if (refreshVoiceBarHook) refreshVoiceBarHook();
 }
 
@@ -2841,10 +2863,18 @@ input.addEventListener('paste', e => {
 $('#plusBtn').onclick = () => $('#fileIn').click();
 
 /* ═══════════════════════════ mic ═══════════════════════════ */
-$('#micBtn').onclick = () => {
+function stopComposerDictation(){
+  const rec = S.rec;
+  if (!rec) return;
+  S.rec = null;
+  document.body.classList.remove('micRec');
+  try { rec.stop(); } catch(e) {}
+  refreshSend();
+}
+function startComposerDictation(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR){ toast('SpeechRecognition unavailable', true); return; }
-  if (S.rec){ S.rec.stop(); return; }
+  if (!SR){ toast(T().micUnavailable, true); return; }
+  if (S.rec){ stopComposerDictation(); return; }
   const rec = new SR();
   const voiceLocale = localStorage.getItem('g3_voice_locale');
   const uiVoiceFallback = S.lang === 'ar' ? 'ar' : S.lang === 'fr' ? 'fr-FR' : 'en-US';
@@ -2852,12 +2882,18 @@ $('#micBtn').onclick = () => {
   catch(e) { rec.lang = uiVoiceFallback; }
   rec.interimResults = true;
   const base = input.value;
-  rec.onresult = e => { let s = ''; for (const r of e.results) s += r[0].transcript; input.value = (base ? base + ' ' : '') + s; syncWritingDirection(input.value); autoGrow(); };
-  rec.onend = () => { S.rec = null; document.body.classList.remove('micRec'); };
-  rec.onerror = rec.onend;
-  S.rec = rec; document.body.classList.add('micRec'); toast(T().listening);
-  rec.start();
-};
+  rec.onresult = e => {
+    if (S.rec !== rec) return;
+    let text = ''; for (const r of e.results) text += r[0].transcript;
+    input.value = (base ? base + ' ' : '') + text;
+    syncWritingDirection(input.value); autoGrow();
+  };
+  rec.onend = () => { if (S.rec === rec){ S.rec = null; document.body.classList.remove('micRec'); refreshSend(); } };
+  rec.onerror = e => { if (S.rec === rec && e.error !== 'aborted') toast(T().micError, true); rec.onend(); };
+  S.rec = rec; document.body.classList.add('micRec'); refreshSend();
+  try { rec.start(); toast(T().listening); }
+  catch(e){ rec.onerror({error:'start'}); }
+}
 
 /* ═══════════════════════════ markdown pipeline ═══════════════════════════ */
 /* v58.63 — إصلاح عرض الرياضيات: العلامة القديمة "\u0000M<n>\u0000" كانت تتحوّل داخل marked إلى U+FFFD
@@ -4937,11 +4973,15 @@ function setWait(tool, args){
 }
 
 /* ── send ── */
-$('#sendBtn').onclick = () => { S.streaming ? stopStream() : send(); };
+$('#sendBtn').onclick = () => {
+  if (S.streaming) { stopStream(); return; }
+  if (input.value.trim() || S.attachments.length) { stopComposerDictation(); send(); return; }
+  startComposerDictation();
+};
 input.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey){
     if (e.isComposing || e.keyCode === 229) return;   // v58.63: Enter أثناء تركيب IME يثبّت النص ولا يرسل
-    e.preventDefault(); if (!S.streaming) send();
+    e.preventDefault(); if (!S.streaming) { stopComposerDictation(); send(); }
   }
 });
 function stopStream(){
@@ -8067,9 +8107,10 @@ function setEntryGate(open){
 setEntryGate(true);
 let authStoryIndex=0;
 function renderAuthStory(){
-  const lang=['ar','en','fr'].includes(S.lang)?S.lang:'ar', story=AUTH_STORIES[authStoryIndex];
+  const lang=['ar','en','fr'].includes(S.lang)?S.lang:'en', story=AUTH_STORIES[authStoryIndex];
   $('#authOrigin').textContent=lang==='ar'?'ذكاء اصطناعي جزائري':lang==='fr'?'IA algérienne':'Algerian AI';
   $('#authWorld').textContent=lang==='ar'?'من الجزائر إلى العالم':lang==='fr'?'De l’Algérie au monde':'From Algeria to the world';
+  $('#authMadeIn').textContent=lang==='ar'?'صُنع في الجزائر ✦':lang==='fr'?'Fabriqué en Algérie ✦':'Made in Algeria ✦';
   $('#authOverlay .auth-showcase-bottom').dir=lang==='ar'?'rtl':'ltr';
   $('#authStoryKicker').textContent=story.category[lang];
   $('#authStoryTitle').textContent=story.title;
@@ -8078,6 +8119,7 @@ function renderAuthStory(){
   AUTH_STORIES.forEach((item,i)=>{const button=document.createElement('button');button.type='button';button.className=i===authStoryIndex?'on':'';button.setAttribute('aria-label',item.title);button.setAttribute('aria-current',i===authStoryIndex?'true':'false');button.onclick=()=>{authStoryIndex=i;renderAuthStory();};container.appendChild(button);});
   const content=$('#authOverlay .auth-content');content.dir=lang==='ar'?'rtl':'ltr';
   $('#authLanguage').value=lang;
+  $('#authOverlay').setAttribute('aria-label',lang==='ar'?'مرحباً بك في Genisi':lang==='fr'?'Bienvenue sur Genisi':'Welcome to Genisi');
 }
 $('#authStoryPrev').onclick=()=>{authStoryIndex=(authStoryIndex+AUTH_STORIES.length-1)%AUTH_STORIES.length;renderAuthStory();};
 $('#authStoryNext').onclick=()=>{authStoryIndex=(authStoryIndex+1)%AUTH_STORIES.length;renderAuthStory();};
@@ -8126,7 +8168,7 @@ function renderAuthForm(){
   $('#mtLogin').classList.toggle('on',!reg);$('#mtReg').classList.toggle('on',reg);
   $('#authForm').innerHTML=
     '<h3>'+ (S.lang==='en'?(reg?'Create your account':'Welcome back'):S.lang==='fr'?(reg?'Créer votre compte':'Bon retour'):reg?'ابدأ رحلتك مع Genisi':'مرحباً بعودتك') +'</h3>'+
-    '<div class="auth-intro">'+(S.lang==='en'?'Your ideas have a place here. Sign in to continue.':S.lang==='fr'?'Vos idées ont leur place ici. Connectez-vous pour continuer.':'مساحة واحدة لأفكارك. سجّل الدخول أو أنشئ حسابك للمتابعة.')+'</div>'+
+    '<div class="auth-intro">'+(S.lang==='en'?(reg?'Your ideas have a place here. Create an account to continue.':'Your ideas have a place here. Sign in to continue.'):S.lang==='fr'?(reg?'Vos idées ont leur place ici. Créez un compte pour continuer.':'Vos idées ont leur place ici. Connectez-vous pour continuer.'):'مساحة واحدة لأفكارك. سجّل الدخول أو أنشئ حسابك للمتابعة.')+'</div>'+
     '<div class="auth-fields">'+
     (reg?'<div class="field"><label for="fUser">'+t.username+'</label><input id="fUser" maxlength="32" autocomplete="username" required></div>':'')+
     '<div class="field"><label for="fMail">'+t.email+'</label><input id="fMail" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com" dir="ltr" required></div>'+
@@ -8155,13 +8197,18 @@ async function loadAtlasChallenge(){
   try{
     const r=await fetch('/api/auth/challenge',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',cache:'no-store',body:JSON.stringify({mode:authMode==='reg'?'register':'login'})});
     const j=await r.json().catch(()=>({}));if(seq!==atlasChallengeSeq)return;if(!r.ok)throw new Error(j.detail||'challenge');
-    atlasChallenge=j;if(q)q.textContent=j.question||AT().loading;
+    atlasChallenge=j;if(q){
+      const match=String(j.expression || j.question || '').match(/(?:\(\d+\s*×\s*\d+\)\s*\+\s*\d+|\d+\s*\+\s*\d+\s*[+−-]\s*\d+)/);
+      const expression=match && match[0];
+      q.textContent=expression ? (S.lang==='ar'?'اختبار Genisi: ما ناتج '+expression+'؟':S.lang==='fr'?'Combien font '+expression+' ?':'What is '+expression+'?') : (j.question||AT().loading);
+      q.dir=S.lang==='ar'?'rtl':'ltr';
+    }
     if(box){box.innerHTML='';(j.options||[]).forEach(value=>{const label=document.createElement('label');label.className='atlas-challenge-choice';const radio=document.createElement('input');radio.type='radio';radio.name='atlasCaptcha';radio.value=String(value);const span=document.createElement('span');span.textContent=String(value);label.append(radio,span);box.appendChild(label);});}
     if(go)go.disabled=false;
-  }catch(e){if(seq!==atlasChallengeSeq)return;if(q)q.textContent='تعذر تحميل الاختبار. اضغط «اختبار جديد».';if(go)go.disabled=true;}
+  }catch(e){if(seq!==atlasChallengeSeq)return;if(q)q.textContent=S.lang==='ar'?'تعذر تحميل الاختبار. اضغط «اختبار جديد».':S.lang==='fr'?'Impossible de charger le test. Cliquez sur Nouveau test.':'Could not load the test. Select New test.';if(go)go.disabled=true;}
 }
 async function solveAtlasProof(prefix,bits){
-  if(!window.crypto||!window.crypto.subtle)throw new Error('WebCrypto غير متاح. افتح الموقع عبر HTTPS.');
+  if(!window.crypto||!window.crypto.subtle)throw new Error(S.lang==='ar'?'WebCrypto غير متاح. افتح الموقع عبر HTTPS.':S.lang==='fr'?'WebCrypto indisponible. Ouvrez le site en HTTPS.':'WebCrypto is unavailable. Open the site over HTTPS.');
   const encoder=new TextEncoder();
   for(let n=0;n<5000000;n++){
     const digest=new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(prefix+':'+n)));
@@ -8169,7 +8216,7 @@ async function solveAtlasProof(prefix,bits){
     if(zeros>=bits)return String(n);
     if((n&1023)===1023)await new Promise(resolve=>setTimeout(resolve,0));
   }
-  throw new Error('تعذر إكمال اختبار الحماية؛ حدّث الاختبار.');
+  throw new Error(S.lang==='ar'?'تعذر إكمال اختبار الحماية؛ حدّث الاختبار.':S.lang==='fr'?'Impossible de terminer la vérification. Renouvelez le test.':'Could not complete the security check. Start a new test.');
 }
 doAuth = async function(){
   if(atlasAuthBusy)return;
@@ -8177,10 +8224,10 @@ doAuth = async function(){
   const email=String($('#fMail')?.value||'').trim().toLowerCase(),password=String($('#fPass')?.value||'');
   const username=String($('#fUser')?.value||'').trim();
   const answer=document.querySelector('input[name="atlasCaptcha"]:checked')?.value;
-  if(!email||!password){toast('أكمل البريد الإلكتروني وكلمة المرور.',true);return;}
+  if(!email||!password){toast(S.lang==='ar'?'أكمل البريد الإلكتروني وكلمة المرور.':S.lang==='fr'?'Renseignez votre e-mail et votre mot de passe.':'Enter your email and password.',true);return;}
   if(reg&&password.length<12){toast(t.minPass,true);return;}
-  if(reg&&password!==String($('#fPass2')?.value||'')){toast('كلمتا المرور غير متطابقتين.',true);return;}
-  if(!atlasChallenge||!answer){toast('أكمل اختبار Genisi أولاً.',true);return;}
+  if(reg&&password!==String($('#fPass2')?.value||'')){toast(S.lang==='ar'?'كلمتا المرور غير متطابقتين.':S.lang==='fr'?'Les mots de passe ne correspondent pas.':'Passwords do not match.',true);return;}
+  if(!atlasChallenge||!answer){toast(S.lang==='ar'?'أكمل اختبار Genisi أولاً.':S.lang==='fr'?'Complétez d’abord le test Genisi.':'Complete the Genisi verification test first.',true);return;}
   atlasAuthBusy=true;const btn=$('#fGo');if(btn){btn.disabled=true;btn.textContent=t.pow;}
   const status=$('#atlasPowStatus');if(status)status.textContent=t.pow;
   try{
@@ -8193,7 +8240,7 @@ doAuth = async function(){
     // This is especially important when the Space is embedded by huggingface.co.
     const verify=await fetch('/api/auth/me',{credentials:'include',cache:'no-store'});
     if(!verify.ok){
-      throw new Error('تم قبول بيانات الدخول، لكن المتصفح لم يرسل Cookie الجلسة. افتح Space مباشرة في تبويب جديد، وتأكد من السماح بملفات الارتباط للموقع.');
+      throw new Error(S.lang==='ar'?'تم قبول بيانات الدخول، لكن المتصفح لم يرسل Cookie الجلسة. افتح الموقع مباشرة وتأكد من السماح بملفات الارتباط.':S.lang==='fr'?'Connexion acceptée, mais le navigateur n’a pas envoyé le cookie de session. Ouvrez le site directement et autorisez les cookies.':'Sign-in was accepted, but your browser did not send the session cookie. Open the site directly and allow cookies.');
     }
     const verified=await verify.json().catch(()=>({}));
     setAuth('cookie-session',verified.user||j.user);
@@ -8205,7 +8252,7 @@ doAuth = async function(){
     await Promise.all([loadHistory(),loadPreferences(),loadWorkspace(),loadAgent()]);
     syncPendingSessionMedia();
     renderAvatar();renderHomeHero();toast(T().done||'تم تسجيل الدخول');
-  }catch(e){toast(String(e.message||'تعذر تسجيل الدخول').slice(0,180),true);loadAtlasChallenge();}
+  }catch(e){toast(String(e.message||(S.lang==='ar'?'تعذر تسجيل الدخول':S.lang==='fr'?'Connexion impossible':'Sign-in failed')).slice(0,180),true);loadAtlasChallenge();}
   finally{atlasAuthBusy=false;const b=$('#fGo');if(b){b.disabled=!atlasChallenge;b.textContent=authMode==='reg'?AT().goRegister:AT().goLogin;}if(status)status.textContent='';}
 };
 

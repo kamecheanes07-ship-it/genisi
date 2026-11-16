@@ -885,6 +885,7 @@ def _make_challenge(mode: str, request: Request) -> dict[str, Any]:
     return {
         "challenge_id": cid,
         "question": f"اختبار Genisi: ما ناتج {expression}؟",
+        "expression": expression,
         "options": [str(x) for x in options],
         "pow_prefix": prefix,
         "difficulty": POW_DIFFICULTY,

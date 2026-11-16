@@ -86,6 +86,7 @@ class GenisiMediaVoiceMusicTests(unittest.TestCase):
         self.assertEqual(ch_res.status_code, 200, ch_res.text)
         ch = ch_res.json()
         answer = _solve_math_question(ch["question"])
+        self.assertEqual(_solve_math_question(ch["expression"]), answer)
         nonce = _solve_pow(ch["pow_prefix"], int(ch["difficulty"]))
         reg_res = client.post(
             "/api/auth/register",
