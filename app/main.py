@@ -8,6 +8,7 @@ import hmac
 import html as html_mod
 import ipaddress
 import json
+import logging
 import os
 import random
 import re
@@ -43,6 +44,8 @@ from .genisi_auth import (
     router as genisi_auth_router,
 )
 from .worker_client import worker as WORKER
+
+logger = logging.getLogger(__name__)
 
 APP_NAME = "AnesNT Genisi"
 SESSION_SECRET = os.getenv("SESSION_SECRET", "")
@@ -574,6 +577,7 @@ async def _hf_request_with_retry(
     *,
     space_url: str,
     extra_headers: dict[str, str] | None = None,
+    retry_server_errors: bool = True,
     **kwargs: Any,
 ) -> httpx.Response:
     """Send an HTTP request to a Gradio Space (HF or ModelScope) with auth & instant 429 mirror failover."""
@@ -611,7 +615,7 @@ async def _hf_request_with_retry(
                 # Immediately mark this mirror throttled so caller fails over to the next mirror without delay
                 _qwen_meta_cache[f"throttled:{base}"] = time.time() + 75.0
                 return res
-            if res.status_code in {502, 503, 504} and retry_5xx == 0:
+            if retry_server_errors and res.status_code in {502, 503, 504} and retry_5xx == 0:
                 await asyncio.sleep(0.28 + random.uniform(0.02, 0.14))
                 continue
             return res
@@ -1280,6 +1284,46 @@ def _normalize_qwen_chat_predict_args(data: list[Any]) -> list[Any]:
     return [text, audio_fd, image_fd, video_fd, clean_hist, sys_prompt, temp, top_p, top_k]
 
 
+class ModelUpstreamError(Exception):
+    """Safe diagnostic metadata, never the provider response body or user input."""
+    def __init__(self, stage: str, status: int | None = None, retry_after: str | None = None):
+        self.stage, self.status, self.retry_after = stage, status, retry_after
+        super().__init__(stage)
+
+
+def _retry_after_hint(value: str | None) -> str:
+    # Only expose a bounded delta-seconds value, never arbitrary upstream text.
+    if value and re.fullmatch(r"[0-9]{1,5}", value.strip()):
+        seconds = int(value.strip())
+        if 0 < seconds <= 86400:
+            return f" انتظر نحو {seconds} ثانية قبل إعادة المحاولة."
+    return " أعد المحاولة لاحقاً."
+
+
+def _model_error_message(model: str, exc: Exception) -> str:
+    if isinstance(exc, ModelUpstreamError):
+        if exc.status == 429:
+            return f"خدمة {model} رفضت الطلب مؤقتاً بسبب حد الطلبات (HTTP 429)." + _retry_after_hint(exc.retry_after)
+        if exc.status is not None:
+            return f"تعذر إتمام طلب {model}؛ أعادت الخدمة HTTP {exc.status}. حاول لاحقاً."
+        if exc.stage == "protocol":
+            return f"استجابة خدمة {model} غير صالحة أو غير مكتملة. حاول لاحقاً."
+        if exc.stage in {"stream", "provider"}:
+            return f"تعذر توليد رد {model} أو انقطع البث قبل اكتماله. حاول لاحقاً."
+    if isinstance(exc, (httpx.TimeoutException, TimeoutError)):
+        return f"انتهت مهلة الاتصال بخدمة {model}. حاول لاحقاً."
+    return f"تعذر الاتصال بخدمة {model}. تحقق من اتصال الخادم وحاول لاحقاً."
+
+
+def _log_model_error(model: str, exc: Exception) -> None:
+    # Exception text, upstream bodies, URLs, prompts, and credentials are not logged.
+    stage = exc.stage if isinstance(exc, ModelUpstreamError) else (
+        "timeout" if isinstance(exc, (httpx.TimeoutException, TimeoutError)) else
+        "network" if isinstance(exc, httpx.RequestError) else "unexpected")
+    status = exc.status if isinstance(exc, ModelUpstreamError) else None
+    logger.warning("model_gateway model=%s stage=%s status=%s error_type=%s", model, stage, status, type(exc).__name__)
+
+
 async def _adapt_qwen_data_for_space(
     client: httpx.AsyncClient,
     data: list[Any],
@@ -1319,6 +1363,7 @@ async def _start_qwen_gradio_call(
         space_url=space_url,
         json={"data": adapted_data},
         timeout=call_timeout,
+        retry_server_errors=False,
     )
     if r_call.status_code == 404 and prefix == "/gradio_api":
         prefix = ""
@@ -1329,13 +1374,17 @@ async def _start_qwen_gradio_call(
             space_url=space_url,
             json={"data": adapted_data},
             timeout=call_timeout,
+            retry_server_errors=False,
         )
     if r_call.status_code >= 400:
-        raise RuntimeError(f"{space_url} HTTP {r_call.status_code}: {r_call.text[:160]}")
-    started = r_call.json() if r_call.content else {}
-    event_id = str(started.get("event_id") or "").strip()
-    if not event_id:
-        raise RuntimeError(f"{space_url}: missing event_id")
+        raise ModelUpstreamError("start", r_call.status_code, r_call.headers.get("retry-after"))
+    try:
+        started = r_call.json() if r_call.content else {}
+    except ValueError as exc:
+        raise ModelUpstreamError("protocol") from exc
+    event_id = started.get("event_id") if isinstance(started, dict) else None
+    if not isinstance(event_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event_id):
+        raise ModelUpstreamError("protocol")
     _qwen_meta_cache[f"prefix:{space_url}"] = prefix
     return f"{space_url}{prefix}/call/{chosen}", event_id
 
@@ -1501,8 +1550,7 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
                     headers=_hf_space_headers(space_url, accept="text/event-stream"), timeout=180.0,
                 ) as upstream:
                     if upstream.status_code >= 400:
-                        err_txt = (await upstream.aread()).decode("utf-8", errors="replace")[:180]
-                        raise RuntimeError(f"{space_url} SSE HTTP {upstream.status_code}: {err_txt}")
+                        raise ModelUpstreamError("stream", upstream.status_code, upstream.headers.get("retry-after"))
                     async with aclosing(_qwen_sse_events(upstream)) as events:
                         async for item in events:
                             if item is None:
@@ -1510,7 +1558,7 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
                                 continue
                             event, raw_data, block = item
                             if event == "error":
-                                raise RuntimeError(f"Space stream error: {raw_data[:160]}")
+                                raise ModelUpstreamError("stream")
                             if event not in {"generating", "complete"}:
                                 continue
                             extracted = None
@@ -1528,12 +1576,13 @@ async def qwen_model_stream(request: Request, payload: dict[str, Any] = Body(...
                                 yield f"event: complete\ndata: {latest_data}\n\n".encode("utf-8")
                                 return
                             else:
-                                raise RuntimeError("Space returned an empty assistant completion")
-                    raise RuntimeError("Space stream ended before completion")
+                                raise ModelUpstreamError("protocol")
+                    raise ModelUpstreamError("stream")
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            message = "تعذر الاتصال بخدمة Atlas أو انقطع البث."
+            _log_model_error("Atlas", exc)
+            message = _model_error_message("Atlas", exc)
             yield f"event: error\ndata: {json.dumps({'message': message}, ensure_ascii=False)}\n\n".encode("utf-8")
 
     return StreamingResponse(
@@ -1555,7 +1604,7 @@ async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...))
                 headers=_hf_space_headers(space_url, accept="text/event-stream"), timeout=180.0,
             ) as upstream:
                 if upstream.status_code >= 400:
-                    raise RuntimeError(f"{space_url} HTTP {upstream.status_code}")
+                    raise ModelUpstreamError("stream", upstream.status_code, upstream.headers.get("retry-after"))
                 latest = ""
                 async with aclosing(_qwen_sse_events(upstream)) as events:
                     async for item in events:
@@ -1563,7 +1612,7 @@ async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...))
                             continue
                         event, raw_data, _ = item
                         if event == "error":
-                            raise RuntimeError(f"Space stream error: {raw_data[:160]}")
+                            raise ModelUpstreamError("stream")
                         if event not in {"generating", "complete"}:
                             continue
                         if raw_data and raw_data != "null":
@@ -1574,12 +1623,13 @@ async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...))
                         if event == "complete":
                             if latest:
                                 return {"ok": True, "text": latest}
-                            raise RuntimeError("Space returned an empty assistant completion")
-                raise RuntimeError("Space stream ended before completion")
+                            raise ModelUpstreamError("protocol")
+                raise ModelUpstreamError("stream")
     except asyncio.CancelledError:
         raise
     except Exception as exc:
-        raise HTTPException(502, "تعذر إتمام الطلب عبر خدمة Atlas.") from exc
+        _log_model_error("Atlas", exc)
+        raise HTTPException(502, _model_error_message("Atlas", exc)) from exc
 
 
 # Carbon uses the public Ornith Space; its owner manages its API key.
@@ -1711,7 +1761,8 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                             yield b": keepalive\n\n"
                     except asyncio.CancelledError:
                         raise
-                    except Exception:
+                    except Exception as exc:
+                        _log_model_error("Carbon-vision", exc)
                         yield sse_event({"type": "error", "message": "تعذر تحليل الصورة؛ لم تُرسل إجابة بديلة. أعد المحاولة."})
                         return
                     finally:
@@ -1732,20 +1783,19 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                 url = ornith.SPACE + "/gradio_api/call/bot_message"
                 response = await client.post(url, json={"data": [history]}, timeout=45.0)
                 if not 200 <= response.status_code < 300:
-                    yield sse_event({"type": "error", "message": f"تعذر بدء طلب Carbon (HTTP {response.status_code})."})
-                    return
-                started = response.json()
+                    raise ModelUpstreamError("start", response.status_code, response.headers.get("retry-after"))
+                try:
+                    started = response.json()
+                except ValueError as exc:
+                    raise ModelUpstreamError("protocol") from exc
                 event_id = started.get("event_id") if isinstance(started, dict) else None
                 if not isinstance(event_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", event_id):
-                    yield sse_event({"type": "error", "message": "استجابة Carbon غير صالحة."})
-                    return
+                    raise ModelUpstreamError("protocol")
                 async with client.stream("GET", url + "/" + event_id, headers={"Accept": "text/event-stream"}, timeout=300.0) as upstream:
                     if not 200 <= upstream.status_code < 300:
-                        yield sse_event({"type": "error", "message": f"تعذر بث Carbon (HTTP {upstream.status_code})."})
-                        return
+                        raise ModelUpstreamError("stream", upstream.status_code, upstream.headers.get("retry-after"))
                     if "text/event-stream" not in upstream.headers.get("content-type", "").lower():
-                        yield sse_event({"type": "error", "message": "استجابة بث Carbon غير صالحة."})
-                        return
+                        raise ModelUpstreamError("protocol")
                     latest = ""
                     async with aclosing(_qwen_sse_events(upstream, idle_limit=285.0)) as stream:
                         async for item in stream:
@@ -1754,8 +1804,7 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                                 continue
                             event, raw_data, _ = item
                             if event == "error":
-                                yield sse_event({"type": "error", "message": "تعذر توليد الرد من Carbon."})
-                                return
+                                raise ModelUpstreamError("stream")
                             if event not in {"generating", "complete"}:
                                 continue
                             if raw_data and raw_data != "null":
@@ -1765,22 +1814,22 @@ async def carbon_model_stream(request: Request) -> StreamingResponse:
                                     snapshot = None
                                 if snapshot is not None:
                                     if ornith.provider_error(snapshot):
-                                        yield sse_event({"type": "error", "message": "خدمة Carbon غير مهيأة أو واجهت خطأ. حاول لاحقاً."})
-                                        return
+                                        raise ModelUpstreamError("provider")
                                     if snapshot != latest:
                                         latest = snapshot
                                         yield sse_event({"type": "snapshot", "answer": latest, "reasoning": ""})
                             if event == "complete":
                                 if not latest.strip():
-                                    yield sse_event({"type": "error", "message": "لم يُرجع Carbon جواباً."})
+                                    raise ModelUpstreamError("protocol")
                                 else:
                                     yield sse_event({"type": "done"})
                                 return
-                    yield sse_event({"type": "error", "message": "انقطع بث Carbon قبل اكتمال الرد."})
+                    raise ModelUpstreamError("stream")
         except asyncio.CancelledError:
             raise
-        except Exception:
-            yield sse_event({"type": "error", "message": "تعذر الاتصال بخدمة Carbon أو انتهت مهلة الطلب."})
+        except Exception as exc:
+            _log_model_error("Carbon", exc)
+            yield sse_event({"type": "error", "message": _model_error_message("Carbon", exc)})
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={
         "Cache-Control": "no-cache, no-store", "X-Accel-Buffering": "no",

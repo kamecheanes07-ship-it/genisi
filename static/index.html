@@ -7750,7 +7750,11 @@ $('#setClose').addEventListener('click', () => { saveState(); });
         if (line.startsWith('event:')) ev = line.slice(6).trim();
         else if (line.startsWith('data:')) ds.push(line.slice(5).trim());
       }
-      if (ev === 'error') throw new Error('خطأ من مزوّد المحادثة');
+      if (ev === 'error'){
+        let message='تعذر إتمام طلب Atlas.';
+        try { message=JSON.parse(ds.join('\n')).message || message; } catch(e){}
+        throw new Error(message);
+      }
       if (ev !== 'generating' && ev !== 'complete') return;
       try {
         const txt = qwenAssistantText(JSON.parse(ds.join('\n')));
