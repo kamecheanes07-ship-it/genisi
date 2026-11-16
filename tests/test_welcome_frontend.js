@@ -13,6 +13,12 @@ assert(!html.includes('<button id="toolsBtn"'));
 assert(!html.includes("$('#toolsBtn').onclick"));
 assert(html.includes("/api/auth/challenge") && html.includes('solveAtlasProof') && html.includes("/api/auth/register"));
 assert(html.includes('/static/genisi-auth-art.jpg'));
+assert(html.includes('#authOverlay .auth-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))'));
+assert(html.includes('focus({preventScroll:true})'));
+assert(html.includes('@media(max-width:760px) and (max-height:760px)'));
+assert(!/voiceSynth:'[^']*(?:VoxCPM|Qwen|Ornith)/i.test(html));
+assert(!/tMusic:'[^']*StepAudio/i.test(html));
+assert(html.includes("modelBtn.innerHTML = '<span>' + modelLabel(S.model) + '</span> ' + chevSvg"));
 // Run the actual async session bootstrap against authenticated, guest and
 // network-error states. The account screen must only stay open for guests.
 let start=html.indexOf('(async function bootSecureAccount(){');

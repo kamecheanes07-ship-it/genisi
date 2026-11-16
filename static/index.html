@@ -1816,6 +1816,7 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
 .composer{border-radius:30px;border-color:var(--border);padding:10px 14px;box-shadow:0 10px 32px rgba(0,0,0,.19)}
 .comp-pill-row{gap:8px}.comp-lead #plusBtn{background:var(--surface2);color:var(--text)}#modelBtn{background:var(--surface2);border:1px solid var(--border);font-size:12.5px}#input::placeholder{opacity:.8}
 @media(min-width:761px) and (max-height:950px){
+  #authOverlay{padding:20px}
   #authOverlay .auth-content{padding:28px 38px}
   #authOverlay .auth-content-inner{padding:14px 0}
   #authOverlay .mtabs{margin-bottom:14px}
@@ -1837,6 +1838,77 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
   .composer{border-radius:26px}.comp-pill-row{gap:5px}#modelBtn{max-width:136px}
 }
 @media(max-width:380px){#authOverlay .atlas-challenge-options{grid-template-columns:repeat(2,minmax(0,1fr))}.auth-showcase{min-height:310px}.auth-content-inner{padding:20px 0}}
+
+/* Keep the entry screen within ordinary laptop viewports; scroll only when necessary. */
+#authOverlay .auth-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
+#authOverlay .auth-fields .field{min-width:0}
+@media(min-width:761px) and (max-height:820px){
+  #authOverlay{padding:12px}
+  #authOverlay .auth-shell{min-height:0;padding:9px;gap:9px}
+  #authOverlay .auth-showcase{min-height:0;padding:22px 28px}
+  #authOverlay .auth-content{padding:18px 28px}
+  #authOverlay .auth-content-inner{padding:9px 0}
+  #authOverlay .auth-welcome-tag{display:none}
+  #authOverlay .mtabs{margin-bottom:8px}
+  #authOverlay .mtab{padding:6px 14px}
+  #authOverlay #authForm h3{font-size:24px;margin-bottom:2px}
+  #authOverlay #authForm .auth-intro{line-height:1.4;margin-bottom:8px}
+  #authOverlay .field{margin-bottom:8px}
+  #authOverlay .field label{margin-bottom:3px}
+  #authOverlay .field input{min-height:40px;padding:8px 12px}
+  #authOverlay .atlas-captcha{padding:8px 12px;margin:5px 0 0}
+  #authOverlay .atlas-captcha #atlasChallengeQuestion{margin:3px 0}
+  #authOverlay .atlas-challenge-choice{min-height:32px}
+  #authOverlay .mrow{margin-top:8px}
+  #authOverlay #fGo{min-height:42px}
+  #authOverlay .auth-swap{margin-top:8px}
+  #authOverlay .auth-footer{padding-top:8px}
+  #authOverlay .auth-story{min-height:115px}
+  #authOverlay .auth-story-controls{margin-top:8px}
+}
+@media(max-width:760px){
+  #authOverlay{padding:8px}
+  #authOverlay .auth-shell{gap:6px;padding:6px;margin:auto 0}
+  #authOverlay .auth-showcase{min-height:0;padding:12px 16px;gap:8px}
+  #authOverlay .auth-brand{font-size:17px}
+  #authOverlay .auth-brand-mark{width:28px;height:28px;font-size:16px}
+  #authOverlay .auth-hero-title{display:none}
+  #authOverlay .auth-story{min-height:0}
+  #authOverlay .auth-story h2{font-size:21px}
+  #authOverlay .auth-story p{font-size:11px;line-height:1.35;margin-top:2px}
+  #authOverlay .auth-story-kicker,#authOverlay .auth-origin{display:none}
+  #authOverlay .auth-story-controls{margin-top:4px}
+  #authOverlay .auth-story-arrows button{width:28px;height:28px}
+  #authOverlay .auth-content{padding:14px 16px}
+  #authOverlay .auth-mini-brand span{width:28px;height:28px}
+  #authOverlay .auth-content-inner{padding:8px 0}
+  #authOverlay .auth-welcome-tag{display:none}
+  #authOverlay .mtabs{margin-bottom:6px}
+  #authOverlay .mtab{padding:6px 12px}
+  #authOverlay #authForm h3{font-size:22px;margin-bottom:1px}
+  #authOverlay #authForm .auth-intro{line-height:1.35;margin-bottom:8px}
+  #authOverlay .field{margin-bottom:8px}
+  #authOverlay .field label{margin-bottom:3px}
+  #authOverlay .field input{min-height:40px;padding:8px 10px}
+  #authOverlay .atlas-captcha{padding:8px 10px;margin:4px 0 0}
+  #authOverlay .atlas-captcha #atlasChallengeQuestion{margin:3px 0}
+  #authOverlay .atlas-challenge-choice{min-height:32px}
+  #authOverlay .mrow{margin-top:8px}
+  #authOverlay #fGo{min-height:42px}
+  #authOverlay .auth-swap{margin-top:8px}
+  #authOverlay .auth-footer{padding-top:8px}
+}
+
+@media(max-width:760px) and (max-height:760px){
+  #authOverlay .auth-showcase{flex-direction:row;align-items:center;gap:8px;padding:8px 12px}
+  #authOverlay .auth-brand-edition,#authOverlay .auth-story p{display:none}
+  #authOverlay .auth-showcase-bottom{flex:1;min-width:0}
+  #authOverlay .auth-story h2{font-size:18px}
+  #authOverlay .auth-story-controls{margin-top:2px}
+  #authOverlay .auth-story-arrows button{width:25px;height:25px}
+  #authOverlay #authForm .auth-intro{display:none}
+  #authOverlay .atlas-captcha .sub{display:none}
+}
 #authOverlay.auth-loading .auth-shell{visibility:hidden}
 #authOverlay.auth-loading:after{content:'جارٍ التحقق من الجلسة…';position:fixed;inset:0;display:grid;place-items:center;color:#625468;font-size:13px;pointer-events:none}
 .auth-showcase-bottom[dir="ltr"]{text-align:left}.auth-showcase-bottom[dir="ltr"] .auth-story h2{text-align:left}
@@ -1916,7 +1988,7 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
 <!-- ═══════════ TOP BAR ═══════════ -->
 <header id="topbar">
   <button class="tbtn" id="sideToggle" aria-label="القائمة"></button>
-  <button class="tchip" id="modelChipTop" type="button"><span class="mname" id="modelChipName">Flash</span><span id="modelChipChev"></span></button>
+  <button class="tchip" id="modelChipTop" type="button"><span class="mname" id="modelChipName">Genisi 4 Atlas</span><span id="modelChipChev"></span></button>
   <div id="brand"><span>Genisi</span></div>
   <div id="topActions">
     <button class="tchip" id="filesChip" type="button"><span id="filesChipLbl">مساحة العمل</span></button>
@@ -2196,8 +2268,8 @@ ar:{dir:'rtl', newChat:'محادثة جديدة', search:'بحث', gallery:'ال
   askPh:'اسأل Genisi', chatPh:'اكتب رسالتك…', tools:'أدوات',
   chipDay:'حسّن يومي', chipLearn:'علّمني', chipSearch:'ابحث في الويب',
   chipImage:'أنشئ صورة', chipVideo:'أنشئ فيديو', chipMusic:'أنشئ موسيقى', pImage:'ولّد لي صورة: ', pVideo:'ولّد لي فيديو: ', pMusic:'ألّف لي مقطوعة موسيقية احترافية عن: ',
-  tSearch:'بحث في الويب', tLatex:'معادلات رياضية (LaTeX)', tChart:'مخطط توضيحي', tDoc:'مستند Word', tImage:'توليد صورة', tVideo:'توليد فيديو', tMusic:'توليد موسيقى (StepAudio-3)', tVoiceCall:'وضع التحدث المباشر (مكالمة صوتية)',
-  voiceReady:'جاهز للتحدث — اضغط على المسرح أو تحدث مباشرة', voiceListening:'يستمع إليك الآن…', voiceThinking:'يفكّر في الرد…', voiceSynth:'يولّد الصوت عبر VoxCPM…', voiceSpeaking:'يتحدث الآن…', voiceAuto:'وضع التحدث · صوت ولغة تلقائيان', voiceEnd:'إنهاء التحدث', voiceHold:'Hold', voiceEndShort:'End', voiceOnHold:'المكالمة قيد الانتظار (Hold)', voiceKbd:'كتابة', voiceHandsFree:'استماع تلقائي', mediaExpired:'حُذفت الوسائط تلقائياً بعد 15 يوماً من عدم الاستخدام', doneMusic:'تم تأليف الموسيقى', wMusic:'جارٍ تأليف الموسيقى',
+  tSearch:'بحث في الويب', tLatex:'معادلات رياضية (LaTeX)', tChart:'مخطط توضيحي', tDoc:'مستند Word', tImage:'توليد صورة', tVideo:'توليد فيديو', tMusic:'توليد موسيقى (Genisi 1 Music)', tVoiceCall:'وضع التحدث المباشر (مكالمة صوتية)',
+  voiceReady:'جاهز للتحدث — اضغط على المسرح أو تحدث مباشرة', voiceListening:'يستمع إليك الآن…', voiceThinking:'يفكّر في الرد…', voiceSynth:'يولّد الصوت عبر Genisi 1 Speak…', voiceSpeaking:'يتحدث الآن…', voiceAuto:'وضع التحدث · صوت ولغة تلقائيان', voiceEnd:'إنهاء التحدث', voiceHold:'Hold', voiceEndShort:'End', voiceOnHold:'المكالمة قيد الانتظار (Hold)', voiceKbd:'كتابة', voiceHandsFree:'استماع تلقائي', mediaExpired:'حُذفت الوسائط تلقائياً بعد 15 يوماً من عدم الاستخدام', doneMusic:'تم تأليف الموسيقى', wMusic:'جارٍ تأليف الموسيقى',
   tFile:'إنشاء ملف Word / Excel / PowerPoint', pFile:'أنشئ لي ملف PowerPoint عن: ',
   deepOn:'التفكير في كل الرسائل', deepOff:'التفكير التلقائي فقط', deepOnMsg:'سيفكّر قبل كل إجابة', deepOffMsg:'التفكير تلقائي: في البرمجة والرياضيات والعلوم والمواضيع الحساسة',
   agentOn:'تفعيل وضع الوكيل', agentOff:'إطفاء وضع الوكيل', agentOnMsg:'وضع الوكيل مفعّل', agentOffMsg:'وضع الوكيل مطفي',
@@ -2242,8 +2314,8 @@ fr:{dir:'ltr', newChat:'Nouvelle conversation', search:'Rechercher', gallery:'Ga
   askPh:'Demandez à Genisi', chatPh:'Écrivez votre message…', tools:'Outils',
   chipDay:'Booster ma journée', chipLearn:'M’apprendre', chipSearch:'Chercher sur le web',
   chipImage:'Créer une image', chipVideo:'Créer une vidéo', chipMusic:'Créer de la musique', pImage:'Génère une image : ', pVideo:'Génère une vidéo : ', pMusic:'Compose une musique professionnelle sur : ',
-  tSearch:'Recherche web', tLatex:'Équations (LaTeX)', tChart:'Diagramme', tDoc:'Document Word', tImage:'Générer une image', tVideo:'Générer une vidéo', tMusic:'Générer de la musique (StepAudio-3)', tVoiceCall:'Mode conversation vocale en direct',
-  voiceReady:'Prêt à parler — touchez la scène ou parlez', voiceListening:'À l’écoute…', voiceThinking:'Réflexion…', voiceSynth:'Synthèse vocale VoxCPM…', voiceSpeaking:'En train de parler…', voiceAuto:'Mode vocal · langue et voix automatiques', voiceEnd:'Quitter le mode vocal', voiceHold:'Hold', voiceEndShort:'End', voiceOnHold:'Appel en attente (Hold)', voiceKbd:'Clavier', voiceHandsFree:'Écoute auto', mediaExpired:'Média supprimé après 15 jours d’inactivité', doneMusic:'Musique composée', wMusic:'Composition musicale',
+  tSearch:'Recherche web', tLatex:'Équations (LaTeX)', tChart:'Diagramme', tDoc:'Document Word', tImage:'Générer une image', tVideo:'Générer une vidéo', tMusic:'Générer de la musique (Genisi 1 Music)', tVoiceCall:'Mode conversation vocale en direct',
+  voiceReady:'Prêt à parler — touchez la scène ou parlez', voiceListening:'À l’écoute…', voiceThinking:'Réflexion…', voiceSynth:'Synthèse vocale Genisi 1 Speak…', voiceSpeaking:'En train de parler…', voiceAuto:'Mode vocal · langue et voix automatiques', voiceEnd:'Quitter le mode vocal', voiceHold:'Hold', voiceEndShort:'End', voiceOnHold:'Appel en attente (Hold)', voiceKbd:'Clavier', voiceHandsFree:'Écoute auto', mediaExpired:'Média supprimé après 15 jours d’inactivité', doneMusic:'Musique composée', wMusic:'Composition musicale',
   tFile:'Créer un fichier Word / Excel / PowerPoint', pFile:'Crée un fichier PowerPoint sur : ',
   deepOn:'Réfléchir à chaque message', deepOff:'Réflexion automatique seulement', deepOnMsg:'Réflexion avant chaque réponse', deepOffMsg:'Réflexion automatique : code, maths, sciences et sujets sensibles',
   agentOn:'Activer le mode agent', agentOff:'Désactiver le mode agent', agentOnMsg:'Mode agent activé', agentOffMsg:'Mode agent désactivé',
@@ -2288,8 +2360,8 @@ en:{dir:'ltr', newChat:'New chat', search:'Search', gallery:'Gallery', history:'
   askPh:'Ask Genisi', chatPh:'Type your message…', tools:'Tools',
   chipDay:'Boost my day', chipLearn:'Teach me', chipSearch:'Search the web',
   chipImage:'Create an image', chipVideo:'Create a video', chipMusic:'Create music', pImage:'Generate an image: ', pVideo:'Generate a video: ', pMusic:'Compose a studio music track about: ',
-  tSearch:'Web search', tLatex:'Math equations (LaTeX)', tChart:'Diagram', tDoc:'Word document', tImage:'Generate image', tVideo:'Generate video', tMusic:'Generate music (StepAudio-3)', tVoiceCall:'Live Voice Call Mode',
-  voiceReady:'Ready to talk — tap stage or speak freely', voiceListening:'Listening…', voiceThinking:'Thinking…', voiceSynth:'Synthesizing voice via VoxCPM…', voiceSpeaking:'Speaking…', voiceAuto:'Voice Mode · Auto language & voice', voiceEnd:'End voice call', voiceHold:'Hold', voiceEndShort:'End', voiceOnHold:'Call on hold', voiceKbd:'Type', voiceHandsFree:'Auto-listen', mediaExpired:'Media automatically deleted after 15 days of inactivity', doneMusic:'Music ready', wMusic:'Composing music',
+  tSearch:'Web search', tLatex:'Math equations (LaTeX)', tChart:'Diagram', tDoc:'Word document', tImage:'Generate image', tVideo:'Generate video', tMusic:'Generate music (Genisi 1 Music)', tVoiceCall:'Live Voice Call Mode',
+  voiceReady:'Ready to talk — tap stage or speak freely', voiceListening:'Listening…', voiceThinking:'Thinking…', voiceSynth:'Synthesizing voice with Genisi 1 Speak…', voiceSpeaking:'Speaking…', voiceAuto:'Voice Mode · Auto language & voice', voiceEnd:'End voice call', voiceHold:'Hold', voiceEndShort:'End', voiceOnHold:'Call on hold', voiceKbd:'Type', voiceHandsFree:'Auto-listen', mediaExpired:'Media automatically deleted after 15 days of inactivity', doneMusic:'Music ready', wMusic:'Composing music',
   tFile:'Create Word / Excel / PowerPoint', pFile:'Create a PowerPoint file about: ',
   deepOn:'Think on every message', deepOff:'Automatic thinking only', deepOnMsg:'Thinking before every answer', deepOffMsg:'Automatic thinking: code, math, science and high-stakes topics',
   agentOn:'Turn agent mode on', agentOff:'Turn agent mode off', agentOnMsg:'Agent mode on', agentOffMsg:'Agent mode off',
@@ -4680,7 +4752,7 @@ function resolveWaitCard(result){
   } else if (url && (res.special === 'audio' || /\.(mp3|wav|ogg|flac|m4a|aac|opus)(\?|$)/i.test(url))){
     isCleanMediaOrDoc = true;
     card.classList.add('has-studio-card');
-    const mTitle = res.title || (card._args && card._args.title) || (S.lang === 'ar' ? 'مقطوعة موسيقية — StepAudio 3' : 'StepAudio 3 Track');
+    const mTitle = res.title || (card._args && card._args.title) || (S.lang === 'ar' ? 'مقطوعة موسيقية — Genisi 1 Music' : 'Genisi 1 Music Track');
     const mCap = res.caption || (card._args && (card._args.caption || card._args.prompt)) || '';
     const dlFileName = (mTitle.replace(/[^\w\u0600-\u06FF -]+/g, '').trim() || 'genisi-music') + '.mp3';
     inner = document.createElement('div'); inner.className = 'wc-result';
@@ -6084,7 +6156,7 @@ async function refineOnce(name, prompt, args){
     return out;
   } catch(e){ try { console.warn('[refine]', e); } catch(_){} return null; }
 }
-function formatStepAudioErr(obj, status){
+function formatStepAudioErrRaw(obj, status){
   if (obj && typeof obj === 'object'){
     if (typeof obj.detail === 'string' && obj.detail.trim()) return obj.detail.trim();
     const err = obj.error || (obj.data && obj.data.error);
@@ -6102,7 +6174,11 @@ function formatStepAudioErr(obj, status){
     if (typeof err === 'string' && err.trim()) return err.trim();
     if (typeof obj.message === 'string' && obj.message.trim()) return obj.message.trim();
   }
-  return 'StepAudio HTTP ' + (status || 'error');
+  return 'Genisi 1 Music HTTP ' + (status || 'error');
+}
+function formatStepAudioErr(obj, status){
+  return formatStepAudioErrRaw(obj, status)
+    .replace(/stepaudio(?:[-\s]*3(?:[-\s]*music)?)?/gi, 'Genisi 1 Music');
 }
 async function postStepAudioJson(relPath, payload, timeoutMs){
   const proxyMap = {'/v1/audio/music/submit': '/api/music/submit', '/v1/audio/music/query': '/api/music/query'};
@@ -6144,7 +6220,7 @@ async function runStepAudioMusic(args, fallbackPrompt, phase){
   const instrumental = Boolean(args.instrumental);
   let cleanLyrics = String(args.lyrics || '').trim().slice(0, 4000);
   if (/^\[?instrumental\]?$/i.test(cleanLyrics)) cleanLyrics = '';
-  const title = String(args.title || args.name || '').trim().slice(0, 120) || (S.lang === 'ar' ? 'مقطوعة موسيقية — StepAudio 3' : 'StepAudio 3 Track');
+  const title = String(args.title || args.name || '').trim().slice(0, 120) || (S.lang === 'ar' ? 'مقطوعة موسيقية — Genisi 1 Music' : 'Genisi 1 Music Track');
 
   // Official stepfun-ai/StepAudio-3-Music payload contract (strictly validated upstream)
   const payload = {
@@ -6188,7 +6264,7 @@ async function runStepAudioMusic(args, fallbackPrompt, phase){
   }
   const taskId = String(sub.task_id || sub.taskId || sub.id || (sub.data && (sub.data.task_id || sub.data.id)) || '').trim();
   if (!blob && !audioOut && !taskId){
-    throw new Error(formatStepAudioErr(sub, 0) || 'لم يُرجع StepAudio-3-Music معرّف مهمة صالحاً.');
+    throw new Error(formatStepAudioErr(sub, 0) || 'لم يُرجع Genisi 1 Music معرّف مهمة صالحاً.');
   }
   let rewrittenLyrics = typeof sub.rewritten_lyrics === 'string' ? sub.rewritten_lyrics : '';
   if (!blob && !audioOut && taskId){
@@ -7277,6 +7353,8 @@ $('#setClose').addEventListener('click', () => { saveState(); });
     localStorage.setItem('g3_route_mode',state.routeMode);
     S.model=state.routeMode; localStorage.setItem('g3_model',S.model);
     syncDeep(); applyLang();
+    const voiceModel = $('#voiceModelBtn');
+    if (voiceModel) voiceModel.innerHTML = '<span>' + modelLabel(S.model) + '</span> ' + I.chev;
   }
   modelLabel = function(){ return state.routeMode === 'carbon' ? ROUTE_NAMES.carbon : ROUTE_NAMES.auto; };
   openModelMenu = function(anchor){
@@ -8049,10 +8127,12 @@ function renderAuthForm(){
   $('#authForm').innerHTML=
     '<h3>'+ (S.lang==='en'?(reg?'Create your account':'Welcome back'):S.lang==='fr'?(reg?'Créer votre compte':'Bon retour'):reg?'ابدأ رحلتك مع Genisi':'مرحباً بعودتك') +'</h3>'+
     '<div class="auth-intro">'+(S.lang==='en'?'Your ideas have a place here. Sign in to continue.':S.lang==='fr'?'Vos idées ont leur place ici. Connectez-vous pour continuer.':'مساحة واحدة لأفكارك. سجّل الدخول أو أنشئ حسابك للمتابعة.')+'</div>'+
+    '<div class="auth-fields">'+
     (reg?'<div class="field"><label for="fUser">'+t.username+'</label><input id="fUser" maxlength="32" autocomplete="username" required></div>':'')+
     '<div class="field"><label for="fMail">'+t.email+'</label><input id="fMail" type="email" maxlength="254" autocomplete="email" placeholder="you@example.com" dir="ltr" required></div>'+
     '<div class="field"><label for="fPass">'+t.password+'</label><div class="auth-pass-wrap"><input id="fPass" type="password" maxlength="128" autocomplete="'+(reg?'new-password':'current-password')+'" placeholder="••••••••••••" dir="ltr" required><button id="fPassToggle" type="button" aria-label="'+(S.lang==='ar'?'إظهار كلمة المرور':S.lang==='fr'?'Afficher le mot de passe':'Show password')+'">'+(S.lang==='ar'?'إظهار':S.lang==='fr'?'Voir':'Show')+'</button></div></div>'+
     (reg?'<div class="field"><label for="fPass2">'+t.confirm+'</label><input id="fPass2" type="password" maxlength="128" autocomplete="new-password" dir="ltr" required></div>':'')+
+    '</div>'+
     '<div class="atlas-captcha"><b>'+t.captchaTitle+'</b><div class="sub">'+t.captchaNote+'</div><div id="atlasChallengeQuestion" aria-live="polite">'+t.loading+'</div><div id="atlasChallengeOptions" class="atlas-challenge-options"></div><button class="atlas-challenge-refresh" id="atlasChallengeRefresh" type="button">↻ '+t.refresh+'</button></div>'+
     '<div class="sub" id="atlasPowStatus" aria-live="polite"></div>'+
     '<div class="mrow"><button class="btn pri" id="fGo" type="button">'+(reg?t.goRegister:t.goLogin)+'</button></div>'+
@@ -8063,7 +8143,7 @@ function renderAuthForm(){
   $('#fGo').onclick=doAuth;
   $('#authForm').querySelectorAll('input').forEach(el=>el.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doAuth();}}));
   loadAtlasChallenge();
-  const first=$('#authForm').querySelector('input');if(first&&!isMobile())first.focus();
+  const first=$('#authForm').querySelector('input');if(first&&!isMobile())first.focus({preventScroll:true});
 }
 openAuth = function(mode){authMode=mode==='reg'?'reg':'login';setEntryGate(true);$('#authOverlay').classList.remove('auth-loading');$('#authOverlay').classList.add('on');renderAuthStory();renderAuthForm();};
 $('#mtLogin').onclick=()=>openAuth('login');$('#mtReg').onclick=()=>openAuth('reg');
@@ -8672,7 +8752,7 @@ function syncPendingSessionMedia(){ if (typeof window.syncPendingSessionMedia ==
     if (holdBtn) holdBtn.innerHTML = I.pause;
     if (closeBtn) closeBtn.innerHTML = I.xBig;
     if (kbdBtn) kbdBtn.innerHTML = I.kbd;
-    modelBtn.innerHTML = '<b>Genisi</b> <span>Auto</span> ' + chevSvg;
+    modelBtn.innerHTML = '<span>' + modelLabel(S.model) + '</span> ' + chevSvg;
 
     plusBtn.addEventListener('click', () => {
       voiceState.drawerOpen = true;

@@ -490,7 +490,7 @@ def _extract_stepaudio_error(data: Any, status_code: int) -> str:
             v = data.get(k)
             if isinstance(v, str) and v.strip():
                 return v.strip()
-    return f"StepAudio HTTP {status_code}"
+    return f"Genisi 1 Music HTTP {status_code}"
 
 
 def _strip_data_uri_prefix(raw: str) -> str:
@@ -699,7 +699,7 @@ async def music_submit(request: Request, payload: dict[str, Any] = Body(...)) ->
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(502, f"تعذر الاتصال بنموذج الموسيقى StepAudio-3-Music: {str(exc)[:240]}") from exc
+        raise HTTPException(502, "تعذر الاتصال بنموذج الموسيقى Genisi 1 Music.") from exc
 
 
 @app.post("/api/music/query")
