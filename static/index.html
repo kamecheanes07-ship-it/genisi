@@ -1854,6 +1854,32 @@ html[lang="ar"] pre,html[lang="ar"] code,html[lang="ar"] kbd{font-family:ui-mono
   .crow1{padding:2px 4px}
 }
 
+
+/* 3D studio: generated code stays inside a sandboxed preview frame. */
+#threeBtn{width:auto;padding:0 12px;font-size:12px;font-weight:700;letter-spacing:.02em;background:var(--surface2);border:1px solid var(--border2)}
+#threeOverlay{z-index:155}
+#threeOverlay .three-modal{width:min(920px,96vw);max-height:min(92dvh,900px);padding:22px;overflow:auto}
+.three-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.three-head h3{font-size:20px;margin:0}.three-close{width:36px;height:36px;border-radius:50%;background:var(--surface2);font-size:21px;flex:none}
+.three-grid{display:grid;grid-template-columns:minmax(220px, .85fr) minmax(0,1.15fr);gap:18px}
+.three-form label{display:block;font-size:13px;font-weight:600;margin-bottom:6px}
+.three-form textarea{display:block;width:100%;min-height:106px;resize:vertical;color:var(--text);background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:12px;font-size:14px;line-height:1.5}
+.three-form textarea:focus{border-color:var(--blue-h);outline:2px solid var(--blue-soft)}
+.three-hint{font-size:12px;line-height:1.6;color:var(--text2);margin-top:10px}
+.three-actions{display:flex;gap:8px;margin-top:14px}.three-actions .btn{padding:10px}
+.three-actions button:disabled{opacity:.42;cursor:not-allowed}
+.three-stage{min-height:320px;position:relative;border:1px solid var(--border2);background:#151820;border-radius:18px;overflow:hidden}
+.three-stage iframe{width:100%;height:100%;position:absolute;inset:0;border:0}
+#threeEmpty[hidden],#threeCancel[hidden]{display:none!important}
+.three-empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;color:#a9adb3;font-size:13px;pointer-events:none}
+.three-status{min-height:24px;margin-top:10px;color:var(--text2);font-size:12px;overflow-wrap:anywhere}
+@media(max-width:760px){
+ #threeBtn{height:36px;padding:0 10px}
+ #threeOverlay{align-items:center;padding:8px}
+ #threeOverlay .three-modal{max-height:calc(100dvh - 16px);width:100%;padding:16px;border-radius:20px}
+ .three-grid{grid-template-columns:1fr;gap:12px}.three-stage{min-height:240px;height:32dvh}.three-form textarea{min-height:72px;font-size:16px}
+}
+
 /* Keep the entry screen within ordinary laptop viewports; scroll only when necessary. */
 #authOverlay .auth-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 12px}
 #authOverlay .auth-fields .field{min-width:0}
@@ -2153,6 +2179,23 @@ html[lang="fr"] #authOverlay.auth-loading:after{content:'Vérification de votre 
       </div>
       <div class="auth-footer"><span>© AnesNT · Genisi</span><span id="authMadeIn">Made in Algeria ✦</span></div>
     </section>
+  </div>
+</div>
+
+<div class="overlay" id="threeOverlay" role="dialog" aria-modal="true" aria-labelledby="threeTitle">
+  <div class="modal three-modal">
+    <div class="three-head"><h3 id="threeTitle">3D Studio</h3><button id="threeClose" class="three-close" type="button" aria-label="Close">×</button></div>
+    <div class="three-grid">
+      <div class="three-form">
+        <label for="threePrompt" id="threeLabel">Describe your object</label>
+        <textarea id="threePrompt" maxlength="300" placeholder="A low poly rocket"></textarea>
+        <p class="three-hint" id="threeHint"></p>
+        <div class="three-actions"><button id="threeGenerate" class="btn pri" type="button">Generate</button><button id="threeCancel" class="btn ghost" type="button" hidden>Cancel</button></div>
+        <div class="three-actions"><button id="threeDownload" class="btn ghost" type="button" disabled>Download GLB</button></div>
+        <div id="threeStatus" class="three-status" role="status" aria-live="polite"></div>
+      </div>
+      <div class="three-stage"><div id="threeFrameSlot"></div><div id="threeEmpty" class="three-empty">Your 3D preview will appear here.</div></div>
+    </div>
   </div>
 </div>
 
@@ -2750,6 +2793,7 @@ function buildComposer(){
       '</div>' +
       '<div class="crow1"><textarea id="input" rows="1" dir="auto"></textarea></div>' +
       '<div class="crow2">' +
+        '<button id="threeBtn" class="cbtn" type="button" aria-label="3D studio">3D</button>' +
         '<button id="modelBtn" type="button"></button>' +
         '<button class="cbtn live-call-btn" id="liveCallBtn" type="button" title="وضع التحدث المباشر">' + I.live + '</button>' +
         '<button id="sendBtn" type="button" title="send">' + I.up + '</button>' +
@@ -2785,6 +2829,63 @@ function refreshSend(){
   b.title = label; b.setAttribute('aria-label', label);
   if (refreshVoiceBarHook) refreshVoiceBarHook();
 }
+
+/* Dedicated 3D studio: no generated code runs in the Genisi document. */
+(function initThreeStudio(){
+  const $3 = id => document.getElementById(id);
+  const overlay=$3('threeOverlay'), slot=$3('threeFrameSlot'), prompt=$3('threePrompt');
+  const text={
+    en:{title:'3D Studio',label:'Describe your object',placeholder:'A low poly rocket',hint:'Use a short English description. This experimental model supports a limited set of objects and styles. Your prompt is sent to an external generation service. Results are not saved; download them before closing.',generate:'Generate',cancel:'Cancel',download:'Download GLB',close:'Close',empty:'Your 3D preview will appear here.',waiting:'Generating… the service may queue your request.',rendering:'Preparing your 3D preview…',ready:'Ready. Drag to rotate and scroll to zoom.',invalid:'Enter a description first.',bad:'Could not generate the model. Try again.',renderError:'The generated code could not produce a valid 3D model. Try again.',exportError:'Could not export the 3D model.',stopped:'Cancelled.',timeout:'Preview timed out. Try again.'},
+    ar:{title:'استوديو المجسمات ثلاثية الأبعاد',label:'صِف المجسم',placeholder:'A low poly rocket',hint:'اكتب وصفاً قصيراً بالإنجليزية. النموذج تجريبي ويدعم أشكالاً وأنماطاً محدودة. يُرسل الوصف إلى خدمة خارجية، والنتيجة لا تُحفظ تلقائياً؛ نزّلها قبل الإغلاق.',generate:'إنشاء',cancel:'إلغاء',download:'تنزيل GLB',close:'إغلاق',empty:'ستظهر المعاينة ثلاثية الأبعاد هنا.',waiting:'جارٍ الإنشاء… قد ينتظر الطلب في الطابور.',rendering:'جارٍ تجهيز المعاينة…',ready:'جاهز. اسحب للتدوير ومرّر للتكبير.',invalid:'اكتب وصفاً أولاً.',bad:'تعذر إنشاء المجسم. حاول مجدداً.',renderError:'تعذر عرض المجسم الناتج. حاول مجدداً.',exportError:'تعذر تصدير المجسم.',stopped:'تم الإلغاء.',timeout:'انتهت مهلة المعاينة. حاول مجدداً.'},
+    fr:{title:'Studio 3D',label:'Décrivez votre objet',placeholder:'A low poly rocket',hint:'Utilisez une courte description en anglais. Ce modèle expérimental ne connaît qu’un nombre limité d’objets et de styles. Votre description est envoyée à un service externe. Le résultat n’est pas enregistré : téléchargez-le avant de fermer.',generate:'Générer',cancel:'Annuler',download:'Télécharger GLB',close:'Fermer',empty:'Votre aperçu 3D apparaîtra ici.',waiting:'Génération en cours… votre demande peut être mise en attente.',rendering:'Préparation de l’aperçu 3D…',ready:'Prêt. Glissez pour tourner et faites défiler pour zoomer.',invalid:'Saisissez une description.',bad:'Impossible de générer le modèle. Réessayez.',renderError:'Impossible d’afficher ce modèle. Réessayez.',exportError:'Impossible d’exporter le modèle.',stopped:'Annulé.',timeout:'Délai d’aperçu dépassé. Réessayez.'}
+  };
+  const tr=()=>text[S.lang]||text.en;
+  let controller=null, frame=null, token='', timer=null, pendingCode=null, viewerReady=false, awaitingExport=false;
+  function status(message){$3('threeStatus').textContent=message;}
+  function setBusy(busy){$3('threeGenerate').disabled=busy;$3('threeCancel').hidden=!busy;}
+  function resetFrame(){clearTimeout(timer);timer=null;if(frame)frame.remove();frame=null;viewerReady=false;pendingCode=null;awaitingExport=false;token='';$3('threeDownload').disabled=true;$3('threeEmpty').hidden=false;}
+  function localize(){const t=tr();$3('threeTitle').textContent=t.title;$3('threeLabel').textContent=t.label;prompt.placeholder=t.placeholder;$3('threeHint').textContent=t.hint;$3('threeGenerate').textContent=t.generate;$3('threeCancel').textContent=t.cancel;$3('threeDownload').textContent=t.download;$3('threeClose').setAttribute('aria-label',t.close);$3('threeEmpty').textContent=t.empty;$3('threeBtn').title=t.title;$3('threeBtn').setAttribute('aria-label',t.title);}
+  function sendToViewer(){if(frame && viewerReady && pendingCode){frame.contentWindow.postMessage({type:'render',token,code:pendingCode},'*');pendingCode=null;}}
+  function open(){if(!S.user){openAuth('login');return;}localize();overlay.classList.add('on');prompt.focus({preventScroll:true});}
+  function close(){if(controller)controller.abort();controller=null;setBusy(false);resetFrame();overlay.classList.remove('on');status('');$3('threeBtn').focus({preventScroll:true});}
+  $3('threeBtn').addEventListener('click',open);$3('threeClose').addEventListener('click',close);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)close();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape' && overlay.classList.contains('on')){e.stopPropagation();close();}});
+  $3('threeCancel').addEventListener('click',()=>{if(controller)controller.abort();});
+  $3('threeGenerate').addEventListener('click',async()=>{
+    if(controller)return;
+    const value=prompt.value.trim();if(!value){status(tr().invalid);prompt.focus();return;}
+    resetFrame();setBusy(true);status(tr().waiting);
+    const task=new AbortController();controller=task;
+    try{
+      const response=await api('/api/models/3d/generate',{method:'POST',body:JSON.stringify({prompt:value}),signal:task.signal});
+      const result=await response.json().catch(()=>({}));
+      if(!response.ok || typeof result.code!=='string' || !result.code.trim() || result.code.length>100000)throw new Error(result.detail||tr().bad);
+      if(controller!==task)return;
+      token=crypto.randomUUID();pendingCode=result.code;frame=document.createElement('iframe');
+      frame.setAttribute('sandbox','allow-scripts');frame.title=tr().title;frame.src='/static/three-viewer.html';
+      slot.replaceChildren(frame);$3('threeEmpty').hidden=true;status(tr().rendering);
+      timer=setTimeout(()=>{resetFrame();status(tr().timeout);},12000);
+    }catch(e){if(controller===task)status(e.name==='AbortError'?tr().stopped:String(e.message||tr().bad).slice(0,240));}
+    finally{if(controller===task){controller=null;setBusy(false);}}
+  });
+  window.addEventListener('message',e=>{
+    if(!frame || e.source!==frame.contentWindow || !e.data || typeof e.data!=='object')return;
+    const d=e.data;
+    if(d.type==='viewer-ready'){viewerReady=true;sendToViewer();return;}
+    if(d.token!==token)return;
+    if(d.type==='rendered'){clearTimeout(timer);timer=null;$3('threeDownload').disabled=false;status(tr().ready);}
+    else if(d.type==='error'){resetFrame();status(tr().renderError);}
+    else if(d.type==='export-error' && awaitingExport){awaitingExport=false;status(tr().exportError);}
+    else if(d.type==='exported' && awaitingExport){
+      awaitingExport=false;const bytes=d.bytes;
+      if(!(bytes instanceof ArrayBuffer) || bytes.byteLength<12 || bytes.byteLength>20*1024*1024 || new DataView(bytes).getUint32(0,true)!==0x46546c67){status(tr().exportError);return;}
+      const url=URL.createObjectURL(new Blob([bytes],{type:'model/gltf-binary'}));const a=document.createElement('a');a.href=url;a.download='genisi-3d.glb';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);
+    }
+  });
+  $3('threeDownload').addEventListener('click',()=>{if(frame && token && !awaitingExport){awaitingExport=true;frame.contentWindow.postMessage({type:'export',token},'*');}});
+  localize();
+})();
 
 /* ═══════════════════════════ attachments ═══════════════════════════ */
 let syncMediaBlobHook = null;
@@ -8098,7 +8199,7 @@ const AUTH_STORIES = [
 // Hide the app from keyboard and assistive technology while the entry gate is open.
 const authInertState=new Map();
 function setEntryGate(open){
-  const ids=['rail','sidebar','topbar','viewHome','viewChat','viewVoice','drawer','scrim','searchOverlay','settingsOverlay','acctOverlay'];
+  const ids=['rail','sidebar','topbar','viewHome','viewChat','viewVoice','drawer','scrim','searchOverlay','settingsOverlay','acctOverlay','threeOverlay'];
   for(const id of ids){const el=document.getElementById(id);if(!el)continue;
     if(open){if(!authInertState.has(el))authInertState.set(el,el.inert);el.inert=true;}
     else if(authInertState.has(el)){el.inert=authInertState.get(el);authInertState.delete(el);}

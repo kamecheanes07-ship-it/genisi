@@ -18,7 +18,7 @@ const ctx={
   window:{SpeechRecognition:class {start(){started++;} stop(){stopped++;this.onend();}}}
 };
 vm.createContext(ctx);
-vm.runInContext(cut('function refreshSend(){','\n\n/* ═══════════════════════════ attachments')+'\n'+cut('function stopComposerDictation(){','\n\n/* ═══════════════════════════ markdown pipeline')+'\n'+cut("$('#sendBtn').onclick = () => {", "\ninput.addEventListener('keydown'")+'\nthis.autoGrow=()=>refreshSend(); this.refresh=refreshSend;',ctx);
+vm.runInContext(cut('function refreshSend(){','\n/* Dedicated 3D studio')+'\n'+cut('function stopComposerDictation(){','\n\n/* ═══════════════════════════ markdown pipeline')+'\n'+cut("$('#sendBtn').onclick = () => {", "\ninput.addEventListener('keydown'")+'\nthis.autoGrow=()=>refreshSend(); this.refresh=refreshSend;',ctx);
 ctx.refresh();assert.equal(button.innerHTML,'MIC');assert.equal(button['aria-label'],'Voice dictation');
 button.onclick();assert.equal(started,1);assert.equal(button.className,'recording');assert.equal(button['aria-label'],'Stop voice dictation');
 const rec=ctx.S.rec;rec.onresult({results:[[{transcript:'hello'}]]});assert.equal(ctx.input.value,'hello');assert.equal(button.innerHTML,'SEND');assert.equal(button['aria-label'],'Send');

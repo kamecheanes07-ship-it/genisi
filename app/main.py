@@ -1632,6 +1632,73 @@ async def qwen_model_once(request: Request, payload: dict[str, Any] = Body(...))
         raise HTTPException(502, _model_error_message("Atlas", exc)) from exc
 
 
+class ThreeDRequest(BaseModel):
+    prompt: str = Field(min_length=1, max_length=300)
+
+
+@app.post("/api/models/3d/generate")
+async def generate_3d_model(request: Request, payload: ThreeDRequest) -> dict[str, Any]:
+    """Collect the fixed provider's SSE code; execution is isolated in the browser."""
+    await require_genisi_csrf(request)
+    user = current_user(request)
+    _rate_limit("3d:" + _sha(str(user["id"])), 12, 300)
+    prompt = payload.prompt.strip()
+    if not prompt:
+        raise HTTPException(422, "Please describe the object.")
+    try:
+        async with asyncio.timeout(150):
+            async with httpx.AsyncClient(timeout=httpx.Timeout(120.0, connect=15.0), follow_redirects=False) as client:
+                async with client.stream("POST", "https://starpowertechnology-wvy-3d-23m.hf.space/api/generate",
+                        json={"prompt": prompt, "format": "threejs", "temperature": 0.45},
+                        headers={"Accept": "text/event-stream"}) as upstream:
+                    if not 200 <= upstream.status_code < 300:
+                        raise ModelUpstreamError("start", upstream.status_code, upstream.headers.get("retry-after"))
+                    if "text/event-stream" not in upstream.headers.get("content-type", "").lower():
+                        raise ModelUpstreamError("protocol")
+                    decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
+                    buffer = ""
+                    pieces: list[str] = []
+                    total = 0
+                    done = False
+                    async for chunk in upstream.aiter_bytes():
+                        if await request.is_disconnected():
+                            raise asyncio.CancelledError()
+                        total += len(chunk)
+                        if total > 256_000:
+                            raise ModelUpstreamError("protocol")
+                        buffer += decoder.decode(chunk).replace("\r", "")
+                        while "\n\n" in buffer:
+                            block, buffer = buffer.split("\n\n", 1)
+                            raw = "\n".join(line[5:].lstrip() for line in block.split("\n") if line.startswith("data:"))
+                            if not raw:
+                                continue
+                            try:
+                                event = json.loads(raw)
+                            except (ValueError, TypeError) as exc:
+                                raise ModelUpstreamError("protocol") from exc
+                            if not isinstance(event, dict) or event.get("error"):
+                                raise ModelUpstreamError("provider")
+                            piece = event.get("t")
+                            if piece is not None:
+                                if not isinstance(piece, str):
+                                    raise ModelUpstreamError("protocol")
+                                pieces.append(piece)
+                            if event.get("done") is True:
+                                done = True
+                                break
+                        if done:
+                            break
+                    code = "".join(pieces)
+                    if not done or not code.strip() or len(code) > 100_000:
+                        raise ModelUpstreamError("protocol")
+                    return {"ok": True, "code": code}
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        _log_model_error("3D", exc)
+        raise HTTPException(502, _model_error_message("3D", exc)) from exc
+
+
 # Carbon uses the public Ornith Space; its owner manages its API key.
 async def _carbon_request_body(request: Request) -> dict[str, Any]:
     body = bytearray()

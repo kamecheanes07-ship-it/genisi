@@ -32,3 +32,9 @@ The concept is a web-based Windows 12-inspired simulation, not an official Micro
 Release 58.65.6: Self-contained Windows 12 design System Prompt embedded in the Genisi application; no external reference file is needed.
 
 Multiple images (up to the six attachment limit) are handled individually: the first is used directly by Atlas, while additional images are separately described and supplied as text for comparison; Carbon uses descriptions for all images. This is not joint image perception and may miss details, adds latency, and stops with an error if an additional image cannot be processed. Descriptions are stored in chat history for follow-up questions. The first Atlas image must be reattached for follow-ups requiring its original pixels.
+
+### 3D Studio
+
+Signed-in users can open **3D** from the composer and enter a short English object description. A third-party service generates Three.js code; Genisi renders it in a sandboxed, opaque-origin iframe with network connections blocked. The preview can be rotated and exported to GLB. It is a separate studio, not an automatic chat tool, and results are not saved to chat: download before closing. The experimental model has a limited vocabulary and may return invalid or inaccurate objects; the external service may be unavailable. Generated code can still consume browser resources despite the sandbox.
+
+The offline viewer bundles Three.js 0.161.0 (license: `static/three-license.txt`). To rebuild `static/three-viewer.html` from `static/three-viewer-source.js`, install development-only `three@0.161.0` and `esbuild@0.25.5`, then run `node scripts/build-three-viewer.mjs`. No npm dependency is needed at runtime.

@@ -1,0 +1,17 @@
+const assert=require('node:assert/strict'),fs=require('node:fs');
+const html=fs.readFileSync('static/index.html','utf8');
+const viewer=fs.readFileSync('static/three-viewer.html','utf8');
+const source=fs.readFileSync('static/three-viewer-source.js','utf8');
+assert(html.includes('id="threeBtn"'));
+assert(html.includes("api('/api/models/3d/generate'"));
+assert(html.includes("frame.setAttribute('sandbox','allow-scripts')"));
+assert(!html.includes("frame.setAttribute('sandbox','allow-scripts allow-same-origin')"));
+assert(html.includes('e.source!==frame.contentWindow'));
+assert(html.includes('d.type===\'exported\' && awaitingExport'));
+assert(html.includes("getUint32(0,true)!==0x46546c67"));
+assert(viewer.includes("connect-src 'none'"));
+assert(viewer.includes("default-src 'none'"));
+assert(viewer.includes("worker-src 'none'"));
+assert(source.includes('new GLTFExporter().parseAsync'));
+assert(source.includes('new Function'));
+console.log('3D isolated viewer and export checks passed');
