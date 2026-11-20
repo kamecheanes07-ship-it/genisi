@@ -1,0 +1,67 @@
+name: Windows Desktop in Browser
+
+on:
+  workflow_dispatch:
+    inputs:
+      vnc_password:
+        description: "VNC Password (8 chars max, leave empty for auto-generated)"
+        required: false
+        default: ""
+        type: string
+
+jobs:
+  browser-desktop:
+    runs-on: windows-latest
+    steps:
+      - name: Install TightVNC, noVNC (websockify), and Cloudflared
+        shell: pwsh
+        run: |
+          # تثبيت TightVNC و Cloudflared و Python عبر winget/choco
+          choco install -y tightvnc cloudflared
+          pip install websockify
+
+          # تحميل واجهة noVNC للويب
+          Invoke-WebRequest -Uri "https://github.com/novnc/noVNC/archive/refs/tags/v1.5.0.zip" -OutFile "novnc.zip"
+          Expand-Archive -Path "novnc.zip" -DestinationPath "C:\novnc"
+          Move-Item "C:\novnc\noVNC-1.5.0\*" "C:\novnc\"
+
+      - name: Configure VNC Password and Start VNC Server
+        shell: pwsh
+        run: |
+          $pass = "${{ inputs.vnc_password }}"
+          if ([string]::IsNullOrEmpty($pass)) {
+            $pass = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 8 | ForEach-Object {[char]$_})
+          }
+          if ($pass.Length -gt 8) { $pass = $pass.Substring(0, 8) }
+
+          Write-Host "::add-mask::$pass"
+          Write-Host "=========================================="
+          Write-Host "VNC Password: $pass"
+          Write-Host "=========================================="
+
+          # حفظ كلمة مرور TightVNC وتفعيل الخدمة
+          $bytes = [System.Text.Encoding]::ASCII.GetBytes($pass)
+          # تشغيل TightVNC مع كلمة المرور عبر سطر الأوامر
+          Start-Process "C:\Program Files\TightVNC\tvnserver.exe" -ArgumentList "-install -silent" -Wait
+          Start-Process "C:\Program Files\TightVNC\tvnserver.exe" -ArgumentList "-controlservice -reload" -ErrorAction SilentlyContinue
+          net start tvnserver
+
+      - name: Start Web Bridge and Print Browser URL
+        shell: pwsh
+        run: |
+          # تشغيل الجسر بين المتصفح و VNC على المنفذ 6080
+          Start-Process "websockify" -ArgumentList "--web=C:\novnc 6080 localhost:5900" -WindowStyle Hidden
+          Start-Sleep -Seconds 3
+
+          # تشغيل نفق Cloudflare لإنشاء رابط HTTPS عام للمتصفح
+          Start-Process "cloudflared" -ArgumentList "tunnel --url http://localhost:6080 --logfile C:\cf.log" -WindowStyle Hidden
+          Start-Sleep -Seconds 8
+
+          $url = Select-String -Path "C:\cf.log" -Pattern "https://[a-zA-Z0-9-]+\.trycloudflare\.com" | ForEach-Object { $_.Matches[0].Value } | Select-Object -First 1
+          Write-Host "=========================================="
+          Write-Host "OPEN THIS LINK IN YOUR BROWSER:"
+          Write-Host "$url/vnc.html"
+          Write-Host "=========================================="
+
+          # إبقاء الجلسة مفتوحة حتى يوقفها GitHub تلقائياً
+          Start-Sleep -Seconds ([int]::MaxValue)
